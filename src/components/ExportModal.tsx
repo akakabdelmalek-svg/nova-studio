@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Download, Film, FolderCheck, X } from 'lucide-react';
+import { CheckCircle2, Download, Film, FolderCheck, Save, X } from 'lucide-react';
 import { ExportOptions, MediaAsset, ProjectState } from '../types/studio';
 import { getExportDimensions } from '../utils/defaults';
 import { ExportResult, exportProjectVideo, getSupportedExportMime } from '../utils/exporter';
+import { saveVideoToDevice } from '../utils/videoSaver';
 
 interface ExportModalProps {
   project: ProjectState;
@@ -27,16 +28,17 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onGoToMyVideos,
   onClose,
 }) => {
-  const [options, setOptions] = useState<ExportOptions>({
+  const [options, setOptions] = useState<ExportOptions>(() => ({
     resolution: '1080p',
     fps: 30,
     quality: 'high',
-    format: 'webm',
-  });
+    format: getSupportedExportMime('mp4').extension === 'mp4' ? 'mp4' : 'webm',
+  }));
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const autoStartedRef = useRef(false);
 
@@ -89,19 +91,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     abortRef.current?.abort();
   };
 
-  const handleDownload = () => {
+  const handleDownload = async (preferSavePicker = false) => {
     if (!result) return;
-    const url = URL.createObjectURL(result.blob);
-    const a = document.createElement('a');
-    const safeName = (project.name || 'nova-studio-export')
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]+/g, '-');
-    a.href = url;
-    a.download = `${safeName}.${result.extension}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setSaveNote(null);
+    const saved = await saveVideoToDevice(
+      result.blob,
+      project.name || 'nova-studio-export',
+      result.extension,
+      result.mimeType,
+      { preferSavePicker }
+    );
+    if (!saved.cancelled) {
+      setSaveNote(
+        saved.method === 'share'
+          ? 'Menu système ouvert — choisissez Enregistrer la vidéo / Photos.'
+          : saved.method === 'picker'
+            ? 'Vidéo enregistrée dans le dossier choisi.'
+            : 'Téléchargement démarré dans votre appareil.'
+      );
+    }
   };
 
   return (
@@ -252,23 +260,38 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   {(result.blob.size / (1024 * 1024)).toFixed(2)} MB · .{result.extension}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleDownload}
-                className="w-full py-2.5 px-4 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                Installer / Télécharger la vidéo
-              </button>
-              {onGoToMyVideos && (
+              <div className="flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={onGoToMyVideos}
-                  className="w-full py-2 px-4 rounded-md bg-[#181C26] hover:bg-[#222836] border border-white/10 text-slate-200 text-xs font-medium flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => void handleDownload(false)}
+                  className="w-full py-2.5 px-4 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <FolderCheck className="w-3.5 h-3.5 text-sky-400" />
-                  Ouvrir dans My Videos
+                  <Download className="w-4 h-4" />
+                  Installer / Télécharger la vidéo
                 </button>
+                {typeof window !== 'undefined' && 'showSaveFilePicker' in window && (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownload(true)}
+                    className="w-full py-2 px-4 rounded-md bg-[#181C26] hover:bg-[#222836] border border-white/10 text-slate-200 text-xs font-medium flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5 text-amber-400" />
+                    Choisir le dossier sur PC (Enregistrer sous...)
+                  </button>
+                )}
+                {onGoToMyVideos && (
+                  <button
+                    type="button"
+                    onClick={onGoToMyVideos}
+                    className="w-full py-2 px-4 rounded-md bg-[#181C26] hover:bg-[#222836] border border-white/10 text-slate-200 text-xs font-medium flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <FolderCheck className="w-3.5 h-3.5 text-sky-400" />
+                    Ouvrir dans My Videos
+                  </button>
+                )}
+              </div>
+              {saveNote && (
+                <p className="text-[11px] text-emerald-300 font-medium">{saveNote}</p>
               )}
             </div>
           )}

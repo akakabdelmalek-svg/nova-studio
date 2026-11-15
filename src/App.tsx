@@ -137,14 +137,21 @@ export default function App() {
           }
         }
 
+        const seeded = typeof window !== 'undefined' && window.localStorage.getItem('nova_studio_seeded') === '1';
         if (projs.length > 0) {
+          if (typeof window !== 'undefined') window.localStorage.setItem('nova_studio_seeded', '1');
           setSavedProjects(projs);
           setProject(projs[0]);
           setSelectedClipId(projs[0].clips[0]?.id || null);
-        } else {
+        } else if (!seeded) {
           const starter = createStarterProject();
           await saveProjectToDB(starter);
+          if (typeof window !== 'undefined') window.localStorage.setItem('nova_studio_seeded', '1');
           if (active) setSavedProjects([starter]);
+        } else {
+          setSavedProjects([]);
+          setProject(createBlankProject('Untitled Video', '16:9'));
+          setSelectedClipId(null);
         }
       } catch {
         // IndexedDB optional in restricted contexts
@@ -1068,24 +1075,53 @@ export default function App() {
     [stopPlayback]
   );
 
+  const handleDeleteProject = useCallback(
+    async (id: string) => {
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('nova_studio_seeded', '1');
+      }
+      await deleteProjectFromDB(id).catch(() => {});
+      const list = await listProjectsFromDB().catch(() => []);
+      setSavedProjects(list);
+      if (project.id === id) {
+        stopPlayback();
+        const fallback = list[0] || createBlankProject('Untitled Video', project.aspectRatio);
+        setProject(fallback);
+        setPlayheadTime(0);
+        setSelectedClipId(fallback.clips[0]?.id || null);
+        setUndoStack([]);
+        setRedoStack([]);
+      }
+    },
+    [project.id, project.aspectRatio, stopPlayback]
+  );
+
+  const handleLoadStarterProject = useCallback(async () => {
+    stopPlayback();
+    const starter = { ...createStarterProject(), id: uid('proj'), name: 'Horizon Travel Reel' };
+    await saveProjectToDB(starter).catch(() => {});
+    const list = await listProjectsFromDB().catch(() => [starter]);
+    setSavedProjects(list);
+    setProject(starter);
+    setPlayheadTime(0);
+    setSelectedClipId(starter.clips[0]?.id || null);
+    setUndoStack([]);
+    setRedoStack([]);
+    setActiveView('editor');
+  }, [stopPlayback]);
+
   if (activeView === 'home') {
     return (
       <>
         <HomeView
-          projects={savedProjects.length > 0 ? savedProjects : [project]}
+          projects={savedProjects}
           currentProject={project}
           exportedVideos={exportedVideos}
           assetsMap={assetsMap}
           onCreateNewVideo={handleCreateNewVideo}
           onOpenProject={handleOpenProjectInEditor}
-          onDeleteProject={async (id) => {
-            await deleteProjectFromDB(id).catch(() => {});
-            const list = await listProjectsFromDB().catch(() => []);
-            setSavedProjects(list);
-            if (project.id === id && list[0]) {
-              setProject(list[0]);
-            }
-          }}
+          onDeleteProject={(id) => void handleDeleteProject(id)}
+          onLoadStarterProject={() => void handleLoadStarterProject()}
           onDeleteExportedVideo={async (id) => {
             await deleteExportedVideoFromDB(id).catch(() => {});
             setExportedVideos((prev) => prev.filter((v) => v.id !== id));
@@ -1337,11 +1373,7 @@ export default function App() {
             setRedoStack([]);
             setShowProjectsModal(false);
           }}
-          onDeleteProject={async (id) => {
-            await deleteProjectFromDB(id).catch(() => {});
-            const list = await listProjectsFromDB().catch(() => []);
-            setSavedProjects(list);
-          }}
+          onDeleteProject={(id) => void handleDeleteProject(id)}
           onClose={() => setShowProjectsModal(false)}
         />
       )}

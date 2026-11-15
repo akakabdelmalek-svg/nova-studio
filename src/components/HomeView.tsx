@@ -17,6 +17,7 @@ import {
   ProjectState,
 } from '../types/studio';
 import { formatTimecode } from '../utils/defaults';
+import { saveVideoToDevice } from '../utils/videoSaver';
 import { NovaLogo } from './NovaLogo';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -28,6 +29,7 @@ interface HomeViewProps {
   onCreateNewVideo: (aspectRatio: AspectRatio, initialFiles?: FileList) => void;
   onOpenProject: (project: ProjectState) => void;
   onDeleteProject: (id: string) => void;
+  onLoadStarterProject: () => void;
   onDeleteExportedVideo: (id: string) => void;
   onGoToEditorToExport: () => void;
 }
@@ -47,6 +49,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onCreateNewVideo,
   onOpenProject,
   onDeleteProject,
+  onLoadStarterProject,
   onDeleteExportedVideo,
   onGoToEditorToExport,
 }) => {
@@ -68,17 +71,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
     };
   }, [videoObjectUrls]);
 
-  const handleDownloadVideo = (video: ExportedVideoRecord) => {
-    const url = videoObjectUrls.get(video.id) || URL.createObjectURL(video.blob);
-    const a = document.createElement('a');
-    const safeName = (video.name || 'nova-studio-video')
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]+/g, '-');
-    a.href = url;
-    a.download = `${safeName}.${video.extension}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const handleDownloadVideo = async (video: ExportedVideoRecord) => {
+    await saveVideoToDevice(
+      video.blob,
+      video.name || 'nova-studio-video',
+      video.extension,
+      video.mimeType
+    );
   };
 
   const getProjectPoster = (proj: ProjectState): string | undefined => {
@@ -361,7 +360,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                       <div className="flex items-center gap-2 pt-1">
                         <button
                           type="button"
-                          onClick={() => handleDownloadVideo(vid)}
+                          onClick={() => void handleDownloadVideo(vid)}
                           className="flex-1 py-2 px-3 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                         >
                           <Download className="w-3.5 h-3.5" />
@@ -405,68 +404,97 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((proj) => {
-              const poster = getProjectPoster(proj);
-              const dur = getProjectDuration(proj);
-              return (
-                <div
-                  key={proj.id}
-                  className="rounded-lg bg-[#11141B] border border-white/8 overflow-hidden flex flex-col hover:border-white/25 transition-colors"
+          {projects.length === 0 ? (
+            <div className="rounded-xl bg-[#11141B] border border-dashed border-white/12 p-8 text-center space-y-3">
+              <FolderOpen className="w-8 h-8 text-slate-500 mx-auto" />
+              <div>
+                <p className="text-sm font-medium text-slate-200">No saved projects</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Create a fresh timeline or load the demo project to get started.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onCreateNewVideo(selectedRatio)}
+                  className="px-4 py-2 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-xs font-semibold cursor-pointer"
                 >
+                  + New Video
+                </button>
+                <button
+                  type="button"
+                  onClick={onLoadStarterProject}
+                  className="px-4 py-2 rounded-md bg-[#181C26] hover:bg-[#222836] border border-white/10 text-slate-200 text-xs font-medium cursor-pointer"
+                >
+                  Load Demo Reel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {projects.map((proj) => {
+                const poster = getProjectPoster(proj);
+                const dur = getProjectDuration(proj);
+                return (
                   <div
-                    onClick={() => onOpenProject(proj)}
-                    className="aspect-video bg-[#080A0E] relative overflow-hidden cursor-pointer group"
+                    key={proj.id}
+                    className="rounded-lg bg-[#11141B] border border-white/8 overflow-hidden flex flex-col hover:border-white/25 transition-colors"
                   >
-                    {poster ? (
-                      <img
-                        src={poster}
-                        alt={proj.name}
-                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-600">
-                        <FolderOpen className="w-7 h-7" />
+                    <div
+                      onClick={() => onOpenProject(proj)}
+                      className="aspect-video bg-[#080A0E] relative overflow-hidden cursor-pointer group"
+                    >
+                      {poster ? (
+                        <img
+                          src={poster}
+                          alt={proj.name}
+                          className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-600">
+                          <FolderOpen className="w-7 h-7" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="px-3 py-1.5 rounded bg-amber-500 text-[#0B0D11] text-xs font-semibold">
+                          Open in Studio
+                        </span>
                       </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <span className="px-3 py-1.5 rounded bg-amber-500 text-[#0B0D11] text-xs font-semibold">
-                        Open in Studio
-                      </span>
                     </div>
-                  </div>
 
-                  <div className="p-3.5 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{proj.name}</p>
-                      <p className="text-[11px] text-slate-400 font-mono-tabular mt-0.5">
-                        {proj.aspectRatio} · {proj.clips.length} clips · {formatTimecode(dur)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => onOpenProject(proj)}
-                        className="px-2.5 py-1.5 rounded bg-[#181C26] hover:bg-[#232836] border border-white/10 text-xs font-medium text-slate-200 cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      {projects.length > 1 && (
+                    <div className="p-3.5 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{proj.name}</p>
+                        <p className="text-[11px] text-slate-400 font-mono-tabular mt-0.5">
+                          {proj.aspectRatio} · {proj.clips.length} clips · {formatTimecode(dur)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
-                          onClick={() => onDeleteProject(proj.id)}
+                          onClick={() => onOpenProject(proj)}
+                          className="px-2.5 py-1.5 rounded bg-[#181C26] hover:bg-[#232836] border border-white/10 text-xs font-medium text-slate-200 cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteProject(proj.id);
+                          }}
                           title="Delete project"
-                          className="p-1.5 rounded text-slate-500 hover:text-rose-400 cursor-pointer"
+                          className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </main>
 
@@ -511,7 +539,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => handleDownloadVideo(previewVideo)}
+                onClick={() => void handleDownloadVideo(previewVideo)}
                 className="px-4 py-2 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />

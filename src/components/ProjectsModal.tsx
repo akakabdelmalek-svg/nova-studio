@@ -88,16 +88,14 @@ export const ProjectsModal: React.FC<ProjectsModalProps> = ({
                       </p>
                     </button>
 
-                    {!isCurrent && (
-                      <button
-                        type="button"
-                        onClick={() => onDeleteProject(p.id)}
-                        title="Delete Project"
-                        className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => onDeleteProject(p.id)}
+                      title="Delete Project"
+                      className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 );
               })
