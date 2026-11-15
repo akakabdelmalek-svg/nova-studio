@@ -1,0 +1,8 @@
+{
+  "name": "Nova Studio",
+  "description": "Free, ad-free multi-track video editing studio in your browser with chroma key, transitions, color grading, audio mixing, and watermark-free export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

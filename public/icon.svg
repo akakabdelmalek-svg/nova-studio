@@ -1,0 +1,51 @@
+<svg width="512" height="512" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hnLogoGrad" x1="18" y1="12" x2="102" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#19E6D6" />
+      <stop offset="50%" stop-color="#3ABFF8" />
+      <stop offset="100%" stop-color="#607BF8" />
+    </linearGradient>
+  </defs>
+
+  <rect x="2" y="2" width="116" height="116" rx="22" fill="#061422" />
+  <rect x="2.75" y="2.75" width="114.5" height="114.5" rx="21.25" stroke="url(#hnLogoGrad)" stroke-opacity="0.28" stroke-width="1.5" />
+
+  <g transform="translate(60 60) rotate(45)">
+    <rect x="-32" y="-32" width="64" height="64" rx="14" stroke="url(#hnLogoGrad)" stroke-width="4.2" />
+    <rect x="-25.5" y="-25.5" width="51" height="51" rx="10.5" stroke="url(#hnLogoGrad)" stroke-width="2.1" stroke-opacity="0.88" />
+  </g>
+
+  <rect x="16" y="21" width="16" height="16" rx="4.5" fill="url(#hnLogoGrad)" />
+  <rect x="33" y="10" width="9" height="9" rx="2.5" fill="url(#hnLogoGrad)" />
+  <path d="M29 24 L36 16" stroke="url(#hnLogoGrad)" stroke-width="2.6" stroke-linecap="round" />
+  <path d="M28 33 C36 37 42 36 48 31" stroke="url(#hnLogoGrad)" stroke-width="3.2" stroke-linecap="round" />
+
+  <rect x="88" y="16" width="15" height="15" rx="4" fill="url(#hnLogoGrad)" />
+  <rect x="103" y="34" width="9" height="9" rx="2.5" fill="url(#hnLogoGrad)" />
+  <path d="M99 28 L106 36" stroke="url(#hnLogoGrad)" stroke-width="2.6" stroke-linecap="round" />
+  <path d="M90 27 C86 35 86 43 92 50" stroke="url(#hnLogoGrad)" stroke-width="3.2" stroke-linecap="round" />
+
+  <rect x="17" y="88" width="15" height="15" rx="4" fill="url(#hnLogoGrad)" />
+  <rect x="11" y="76" width="8.5" height="8.5" rx="2.3" fill="url(#hnLogoGrad)" />
+  <path d="M22 90 L16 82" stroke="url(#hnLogoGrad)" stroke-width="2.6" stroke-linecap="round" />
+  <path d="M29 91 C34 83 34 75 28 69" stroke="url(#hnLogoGrad)" stroke-width="3.2" stroke-linecap="round" />
+
+  <rect x="88" y="82" width="16" height="16" rx="4.5" fill="url(#hnLogoGrad)" />
+  <rect x="78" y="101" width="9" height="9" rx="2.5" fill="url(#hnLogoGrad)" />
+  <path d="M91 96 L84 104" stroke="url(#hnLogoGrad)" stroke-width="2.6" stroke-linecap="round" />
+  <path d="M91 86 C83 82 77 83 70 89" stroke="url(#hnLogoGrad)" stroke-width="3.2" stroke-linecap="round" />
+
+  <g fill="url(#hnLogoGrad)">
+    <rect x="68" y="12" width="9" height="9" rx="2.2" transform="rotate(45 72.5 16.5)" />
+    <rect x="78" y="21" width="6.5" height="6.5" rx="1.6" transform="rotate(45 81.25 24.25)" />
+    <rect x="14" y="45" width="8.5" height="8.5" rx="2" transform="rotate(45 18.25 49.25)" />
+    <rect x="23" y="38" width="6" height="6" rx="1.5" transform="rotate(45 26 41)" />
+    <rect x="97" y="67" width="8.5" height="8.5" rx="2" transform="rotate(45 101.25 71.25)" />
+    <rect x="90" y="75" width="6" height="6" rx="1.5" transform="rotate(45 93 78)" />
+    <rect x="42" y="99" width="9" height="9" rx="2.2" transform="rotate(45 46.5 103.5)" />
+    <rect x="35" y="91" width="6.5" height="6.5" rx="1.6" transform="rotate(45 38.25 94.25)" />
+  </g>
+
+  <path d="M44 48 V72 M44 60 H57 M57 48 V72" stroke="url(#hnLogoGrad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M64 72 V48 L77 72 V48" stroke="url(#hnLogoGrad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
