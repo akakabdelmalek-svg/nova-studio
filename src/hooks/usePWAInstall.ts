@@ -10,16 +10,7 @@ export type DetectedPlatform = 'ios' | 'android' | 'desktop';
 declare global {
   interface Window {
     __novaDeferredInstallPrompt?: BeforeInstallPromptEvent | null;
-    novaStudioDesktop?: { isDesktopApp?: boolean; platform?: string };
   }
-}
-
-function detectDesktopOS(): 'win' | 'mac' | 'linux' {
-  if (typeof navigator === 'undefined') return 'win';
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes('mac')) return 'mac';
-  if (ua.includes('linux')) return 'linux';
-  return 'win';
 }
 
 export function usePWAInstall() {
@@ -31,11 +22,7 @@ export function usePWAInstall() {
   const [inIframe, setInIframe] = useState(false);
 
   useEffect(() => {
-    const isDesktopApp =
-      Boolean(window.novaStudioDesktop?.isDesktopApp) ||
-      window.navigator.userAgent.includes('Electron');
     const isStandalone =
-      isDesktopApp ||
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsInstalled(isStandalone);
@@ -112,46 +99,6 @@ export function usePWAInstall() {
     }
   }, []);
 
-  const downloadBestDesktopInstaller = useCallback(async (): Promise<{
-    nativeBinary: boolean;
-    fileName: string;
-  }> => {
-    const os = detectDesktopOS();
-    try {
-      const res = await fetch(`/api/latest-installer?platform=${os}`);
-      if (res.ok) {
-        const data = (await res.json()) as {
-          available?: boolean;
-          downloadUrl?: string;
-          fileName?: string;
-        };
-        if (data.available && data.downloadUrl) {
-          const a = document.createElement('a');
-          a.href = data.downloadUrl;
-          a.download = data.fileName || 'Nova-Studio-Setup.exe';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          return {
-            nativeBinary: true,
-            fileName: data.fileName || 'Nova-Studio-Setup.exe',
-          };
-        }
-      }
-    } catch {
-      // Fallback to setup package ZIP
-    }
-
-    const origin = encodeURIComponent(window.location.origin);
-    const a = document.createElement('a');
-    a.href = `/api/install-package?origin=${origin}`;
-    a.download = 'Nova-Studio-Setup.zip';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    return { nativeBinary: false, fileName: 'Nova-Studio-Setup.zip' };
-  }, []);
-
   return {
     isInstallable: Boolean(deferredPrompt),
     isInstalled,
@@ -161,7 +108,6 @@ export function usePWAInstall() {
     inIframe,
     install,
     cacheOfflineBundle,
-    downloadBestDesktopInstaller,
   };
 }
 

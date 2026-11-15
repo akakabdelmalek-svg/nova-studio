@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Check,
   CheckCircle2,
   Copy,
   Download,
+  Laptop,
+  MonitorDown,
   MoreVertical,
-  PackageCheck,
+  PlusSquare,
   Share2,
+  Smartphone,
   X,
 } from 'lucide-react';
-import { useOnlineStatus, usePWAInstall } from '../hooks/usePWAInstall';
+import { DetectedPlatform, useOnlineStatus, usePWAInstall } from '../hooks/usePWAInstall';
 import { NovaLogo } from './NovaLogo';
 
 interface PWAInstallButtonProps {
@@ -24,33 +27,32 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
   const {
     isInstallable,
     isInstalled,
-    isIOS,
-    isAndroid,
+    platform,
     inIframe,
     install,
     cacheOfflineBundle,
-    downloadBestDesktopInstaller,
   } = usePWAInstall();
 
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetectedPlatform>(platform);
   const [installing, setInstalling] = useState(false);
   const [cachedOffline, setCachedOffline] = useState(false);
-  const [downloadedAsset, setDownloadedAsset] = useState<{
-    nativeBinary: boolean;
-    fileName: string;
-  } | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
+
+  useEffect(() => {
+    setActiveTab(platform);
+  }, [platform]);
 
   if (isInstalled) {
     return null;
   }
 
-  const handleInstallAll = async () => {
+  const handleInstallClick = async () => {
     setInstalling(true);
     const cached = await cacheOfflineBundle();
     setCachedOffline(cached);
 
-    // 1. Native 1-click PWA install prompt (Android Chrome / Desktop Chrome & Edge)
+    // 1-click native browser PWA install prompt (Chrome / Edge on PC & Android)
     if (isInstallable) {
       const accepted = await install();
       if (accepted) {
@@ -59,24 +61,8 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
       }
     }
 
-    // 2. iOS Safari guided Add to Home Screen flow
-    if (isIOS) {
-      setInstalling(false);
-      setShowStatusModal(true);
-      return;
-    }
-
-    // 3. Android fallback without native prompt: show quick 2-tap Add to Home Screen modal
-    if (isAndroid) {
-      setInstalling(false);
-      setShowStatusModal(true);
-      return;
-    }
-
-    // 4. PC (Windows / Mac / Linux): 1-click automatic download of Nova Studio installer package
-    const result = await downloadBestDesktopInstaller();
-    setDownloadedAsset(result);
     setInstalling(false);
+    setActiveTab(platform);
     setShowStatusModal(true);
   };
 
@@ -101,14 +87,14 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
     <>
       <button
         type="button"
-        onClick={handleInstallAll}
+        onClick={handleInstallClick}
         disabled={installing}
-        title="Installer Nova Studio en 1 clic (PC, Android & iOS)"
+        title="Installer Nova Studio (iOS, Android & PC)"
         className={`${buttonClasses} disabled:opacity-60 ${className}`.trim()}
       >
         <NovaLogo size={variant === 'hero' ? 18 : 16} className="shrink-0" />
         <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-        <span>{installing ? 'Installation...' : 'Installer App'}</span>
+        <span>{installing ? 'Préparation...' : 'Installer App'}</span>
       </button>
 
       {showStatusModal && (
@@ -128,7 +114,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
                     Installer Nova Studio
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Téléchargement automatique · iOS, Android & PC
+                    Application PWA native · iOS, Android & PC
                   </p>
                 </div>
               </div>
@@ -144,51 +130,99 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             {cachedOffline && (
               <div className="flex items-center gap-2 p-2.5 rounded-lg border border-emerald-500/35 bg-emerald-500/10 text-xs text-emerald-200">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Application et ressources mises en cache local dans votre navigateur.</span>
+                <span>Application et logo HN mis en cache local pour le mode hors-ligne.</span>
               </div>
             )}
 
-            {isIOS ? (
+            {isInstallable && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await install();
+                  if (ok) setShowStatusModal(false);
+                }}
+                className="w-full py-2.5 px-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Installer maintenant en 1 clic</span>
+              </button>
+            )}
+
+            {/* Platform Tabs */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-[#070B14] border border-white/8">
+              <button
+                type="button"
+                onClick={() => setActiveTab('ios')}
+                className={`py-2 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  activeTab === 'ios'
+                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/40'
+                    : 'text-slate-400 hover:text-white border border-transparent'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>iOS</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('android')}
+                className={`py-2 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  activeTab === 'android'
+                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/40'
+                    : 'text-slate-400 hover:text-white border border-transparent'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Android</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('desktop')}
+                className={`py-2 px-2 rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                  activeTab === 'desktop'
+                    ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-400/40'
+                    : 'text-slate-400 hover:text-white border border-transparent'
+                }`}
+              >
+                <Laptop className="w-3.5 h-3.5" />
+                <span>PC / Mac</span>
+              </button>
+            </div>
+
+            {activeTab === 'ios' && (
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#070B14] space-y-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2 font-semibold text-cyan-300">
                   <Share2 className="w-4 h-4" />
-                  <span>Ajouter sur l’écran d’accueil (iPhone / iPad)</span>
+                  <span>Installer sur iPhone / iPad (Safari)</span>
                 </div>
-                <p>1. Appuyez sur <strong>Partager</strong> dans Safari.</p>
-                <p>2. Sélectionnez <strong>Sur l’écran d’accueil</strong> pour installer l’app Nova Studio avec son logo HN.</p>
+                <p>1. Appuyez sur le bouton <strong>Partager</strong> dans Safari.</p>
+                <p className="flex items-center gap-1.5">
+                  2. Appuyez sur <PlusSquare className="w-3.5 h-3.5 text-cyan-400 inline shrink-0" /> <strong>Sur l’écran d’accueil</strong> puis <strong>Ajouter</strong>.
+                </p>
               </div>
-            ) : isAndroid ? (
+            )}
+
+            {activeTab === 'android' && (
               <div className="p-3.5 rounded-lg border border-slate-800 bg-[#070B14] space-y-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2 font-semibold text-cyan-300">
                   <MoreVertical className="w-4 h-4" />
                   <span>Installer sur Android (Chrome / Edge)</span>
                 </div>
-                <p>1. Appuyez sur le menu <strong>⋮</strong> en haut à droite du navigateur.</p>
+                <p>1. Ouvrez le menu <strong>⋮</strong> en haut à droite du navigateur.</p>
                 <p>2. Appuyez sur <strong>Installer l’application</strong> ou <strong>Ajouter à l’écran d’accueil</strong>.</p>
               </div>
-            ) : downloadedAsset?.nativeBinary ? (
-              <div className="p-3.5 rounded-lg border border-cyan-500/35 bg-cyan-500/10 space-y-2 text-xs text-slate-200">
+            )}
+
+            {activeTab === 'desktop' && (
+              <div className="p-3.5 rounded-lg border border-slate-800 bg-[#070B14] space-y-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2 font-semibold text-cyan-300">
-                  <PackageCheck className="w-4 h-4" />
-                  <span>Installeur téléchargé : {downloadedAsset.fileName}</span>
+                  <MonitorDown className="w-4 h-4" />
+                  <span>Installer sur PC / Mac (Chrome, Edge, Safari)</span>
                 </div>
                 <p>
-                  Ouvrez le fichier téléchargé et cliquez sur <strong>Installer / OK</strong> pour lancer Nova Studio comme application PC.
-                </p>
-              </div>
-            ) : (
-              <div className="p-3.5 rounded-lg border border-slate-800 bg-[#070B14] space-y-2.5 text-xs text-slate-300">
-                <div className="flex items-center gap-2 font-semibold text-cyan-300">
-                  <PackageCheck className="w-4 h-4" />
-                  <span>
-                    Téléchargement automatique lancé ({downloadedAsset?.fileName || 'Nova-Studio-Setup.zip'})
-                  </span>
-                </div>
-                <p>
-                  • <strong>Sur PC via le ZIP</strong> : ouvrez <code className="text-cyan-200">Nova-Studio-Setup.zip</code>, extrayez puis double-cliquez sur <strong className="text-slate-100">Install-Nova-Studio-Windows.bat</strong> (Windows), <strong className="text-slate-100">Install-Nova-Studio-Mac.command</strong> (Mac) ou <strong className="text-slate-100">Install-Nova-Studio-Linux.sh</strong> (Linux).
+                  • <strong>Chrome / Edge</strong> : cliquez sur l’icône <strong>Installer</strong> dans la barre d’adresse (à droite de l’URL).
                 </p>
                 <p>
-                  • <strong>En 1 clic direct sans ZIP</strong> : ouvrez l’app dans <strong>Chrome</strong> ou <strong>Edge</strong> (hors iframe) puis cliquez sur <em>Installer</em>.
+                  • <strong>Safari Mac</strong> : cliquez sur <strong>Fichier → Ajouter au Dock</strong>.
                 </p>
               </div>
             )}
@@ -196,7 +230,7 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
             {inIframe && !isInstallable && (
               <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 flex items-center justify-between gap-3 text-xs">
                 <p className="text-amber-200 leading-relaxed">
-                  Aperçu intégré : copiez l’URL dans Chrome/Safari pour l’installation directe en 1 clic.
+                  Aperçu intégré : ouvrez ce lien directement dans un onglet navigateur pour installer en 1 clic.
                 </p>
                 <button
                   type="button"
@@ -209,24 +243,13 @@ export const PWAInstallButton: React.FC<PWAInstallButtonProps> = ({
               </div>
             )}
 
-            <div className="flex items-center gap-2 pt-1">
-              {!isIOS && !isAndroid && (
-                <button
-                  type="button"
-                  onClick={() => void downloadBestDesktopInstaller()}
-                  className="flex-1 h-9 rounded-md border border-cyan-500/40 bg-cyan-500/10 text-cyan-200 text-xs font-semibold hover:bg-cyan-500/20 transition-colors cursor-pointer"
-                >
-                  Retélécharger
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setShowStatusModal(false)}
-                className="flex-1 h-9 rounded-md bg-cyan-500 text-slate-950 text-xs font-bold hover:bg-cyan-400 transition-colors cursor-pointer"
-              >
-                Fermer
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowStatusModal(false)}
+              className="w-full h-9 rounded-md bg-cyan-500 text-slate-950 text-xs font-bold hover:bg-cyan-400 transition-colors cursor-pointer"
+            >
+              Fermer
+            </button>
           </div>
         </div>
       )}
