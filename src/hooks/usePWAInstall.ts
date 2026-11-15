@@ -44,6 +44,12 @@ export function usePWAInstall() {
       setPlatform('desktop');
     }
 
+    const syncEarlyPrompt = () => {
+      if (window.__novaDeferredInstallPrompt) {
+        setDeferredPrompt(window.__novaDeferredInstallPrompt);
+      }
+    };
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       const promptEvt = e as BeforeInstallPromptEvent;
@@ -55,14 +61,24 @@ export function usePWAInstall() {
       setIsInstalled(true);
       window.__novaDeferredInstallPrompt = null;
       setDeferredPrompt(null);
+      try {
+        window.localStorage.setItem('nova_studio_app_installed', '1');
+      } catch {
+        // ignore storage restrictions
+      }
     };
 
+    syncEarlyPrompt();
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('nova-pwa-installable', syncEarlyPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
+    window.addEventListener('nova-pwa-installed', handleAppInstalled);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('nova-pwa-installable', syncEarlyPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      window.removeEventListener('nova-pwa-installed', handleAppInstalled);
     };
   }, []);
 
@@ -75,6 +91,11 @@ export function usePWAInstall() {
       setIsInstalled(true);
       window.__novaDeferredInstallPrompt = null;
       setDeferredPrompt(null);
+      try {
+        window.localStorage.setItem('nova_studio_app_installed', '1');
+      } catch {
+        // ignore
+      }
       return true;
     }
     return false;
@@ -93,6 +114,11 @@ export function usePWAInstall() {
         '/apple-touch-icon.png',
         '/icon.svg',
       ]);
+      try {
+        window.localStorage.setItem('nova_studio_offline_ready', '1');
+      } catch {
+        // ignore
+      }
       return true;
     } catch {
       return false;

@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Scissors,
   Trash2,
+  X,
 } from 'lucide-react';
 import {
   AnimationPreset,
@@ -40,6 +41,8 @@ interface InspectorPanelProps {
   onRunBackgroundRemoval: (clipId: string) => void;
   onRunGenerateSubtitles: (clipId: string) => void;
   onStartPickTrackTarget: (clipId: string) => void;
+  className?: string;
+  onMobileClose?: () => void;
 }
 
 type InspectorTab = 'basic' | 'color' | 'fx' | 'ai' | 'text';
@@ -68,14 +71,36 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onRunBackgroundRemoval,
   onRunGenerateSubtitles,
   onStartPickTrackTarget,
+  className,
+  onMobileClose,
 }) => {
   const [tab, setTab] = useState<InspectorTab>('basic');
 
   if (!selectedClip) {
     return (
-      <aside className="w-76 xl:w-80 shrink-0 bg-[#11141B] border-l border-white/8 flex flex-col min-h-0 select-none">
-        <div className="px-4 py-3 border-b border-white/8">
-          <h2 className="text-xs font-semibold text-slate-200">Project Settings</h2>
+      <aside
+        className={
+          className ||
+          'w-76 xl:w-80 shrink-0 bg-[#11141B] border-l border-white/8 flex flex-col min-h-0 select-none'
+        }
+      >
+        <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            {onMobileClose && (
+              <span className="lg:hidden w-8 h-1 rounded-full bg-white/25" aria-hidden="true" />
+            )}
+            <h2 className="text-xs font-semibold text-slate-200">Project Settings</h2>
+          </div>
+          {onMobileClose && (
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="lg:hidden px-2.5 py-1 rounded bg-white/8 hover:bg-white/15 text-xs font-medium text-slate-200 flex items-center gap-1 cursor-pointer min-h-[32px]"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Done</span>
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -185,9 +210,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   const activeTab = availableTabs.some((t) => t.id === tab) ? tab : availableTabs[0].id;
 
   return (
-    <aside className="w-76 xl:w-80 shrink-0 bg-[#11141B] border-l border-white/8 flex flex-col min-h-0 select-none">
+    <aside
+      className={
+        className ||
+        'w-76 xl:w-80 shrink-0 bg-[#11141B] border-l border-white/8 flex flex-col min-h-0 select-none'
+      }
+    >
       {/* Header + Quick Clip Actions */}
-      <div className="px-4 py-2.5 border-b border-white/8 flex items-center justify-between gap-2">
+      <div className="px-3.5 sm:px-4 py-2.5 border-b border-white/8 flex items-center justify-between gap-2 shrink-0">
         <div className="min-w-0">
           <h2 className="text-xs font-semibold text-white truncate">{selectedClip.name}</h2>
           <p className="text-[11px] text-slate-400 font-mono-tabular">
@@ -219,6 +249,16 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+          {onMobileClose && (
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="lg:hidden ml-1 px-2.5 py-1 rounded bg-white/8 hover:bg-white/15 text-xs font-medium text-slate-200 flex items-center gap-1 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Done</span>
+            </button>
+          )}
         </div>
       </div>
 

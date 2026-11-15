@@ -76,6 +76,27 @@ input[type='range'].studio-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
 }
 
+@media (pointer: coarse) {
+  input[type='range'].studio-slider::-webkit-slider-thumb {
+    width: 18px;
+    height: 18px;
+    margin-top: -7px;
+  }
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

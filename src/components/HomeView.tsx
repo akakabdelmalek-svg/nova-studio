@@ -100,17 +100,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
   };
 
   return (
-    <div className="h-screen w-screen overflow-y-auto bg-[#0B0D11] text-[#F1F3F7] flex flex-col">
+    <div className="h-[100dvh] w-screen overflow-y-auto bg-[#0B0D11] text-[#F1F3F7] flex flex-col pb-safe">
       {/* Clean 3-Zone Top Header */}
-      <header className="h-14 shrink-0 sticky top-0 z-20 bg-[#11141B]/95 backdrop-blur-sm border-b border-white/8 px-6 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <NovaLogo size={30} />
-          <span className="font-display text-lg font-bold tracking-tight text-white whitespace-nowrap">
+      <header className="h-14 shrink-0 sticky top-0 z-20 bg-[#11141B]/95 backdrop-blur-sm border-b border-white/8 px-3 sm:px-6 flex items-center justify-between gap-3 sm:gap-6">
+        <div className="flex items-center gap-2 shrink-0 min-w-0">
+          <NovaLogo size={28} />
+          <span className="font-display text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap truncate">
             Nova Studio
           </span>
         </div>
 
-        <nav className="flex items-center gap-6 text-sm font-medium text-slate-300">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
           <button
             type="button"
             onClick={() => scrollToSection('home-hero')}
@@ -141,15 +141,16 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </button>
         </nav>
 
-        <div className="flex items-center gap-2.5 shrink-0">
-          <PWAInstallButton variant="header" />
+        <div className="flex items-center gap-2 shrink-0">
+          <PWAInstallButton variant="compact" className="sm:h-9 sm:px-3" />
           <button
             type="button"
             onClick={() => onCreateNewVideo(selectedRatio)}
-            className="px-4 py-2 rounded-md bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-[#0B0D11] text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+            className="px-3 sm:px-4 py-2 rounded-md bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-[#0B0D11] text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer transition-colors"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>New Video</span>
+            <span className="hidden xs:inline sm:inline">New Video</span>
+            <span className="sm:hidden">New</span>
           </button>
         </div>
       </header>
@@ -169,33 +170,60 @@ export const HomeView: React.FC<HomeViewProps> = ({
         }}
       />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8 space-y-10">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3.5 sm:px-6 py-4 sm:py-8 space-y-7 sm:space-y-10">
+        {/* Mobile Quick Section Bar */}
+        <div className="flex md:hidden items-center gap-2 overflow-x-auto no-scrollbar pb-1 text-xs font-medium">
+          <button
+            type="button"
+            onClick={() => scrollToSection('my-videos')}
+            className="px-3 py-2 rounded-md bg-[#161A23] border border-white/8 text-slate-200 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            My Videos ({exportedVideos.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollToSection('my-projects')}
+            className="px-3 py-2 rounded-md bg-[#161A23] border border-white/8 text-slate-200 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            Projects ({projects.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenProject(currentProject)}
+            className="px-3 py-2 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-300 whitespace-nowrap shrink-0 cursor-pointer"
+          >
+            Open Studio
+          </button>
+        </div>
+
         {/* Hero / Quick Create Section */}
         <section
           id="home-hero"
-          className="rounded-xl bg-[#11141B] border border-white/8 p-6 md:p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8"
+          className="rounded-xl bg-[#11141B] border border-white/8 p-4 sm:p-6 md:p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 lg:gap-8"
         >
-          <div className="space-y-4 max-w-2xl">
+          <div className="space-y-4 w-full max-w-2xl">
             <div className="flex items-center gap-3">
-              <NovaLogo size={46} />
-              <div>
-                <h1 className="font-display text-2xl md:text-3xl font-bold tracking-tight text-white">
+              <NovaLogo size={42} className="shrink-0" />
+              <div className="min-w-0">
+                <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-bold tracking-tight text-white">
                   Create your next video
                 </h1>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                   Free · Ad-Free · No Watermark · 280+ Transitions & 270+ Live Effects
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-xs text-slate-400 mr-1">Aspect Ratio:</span>
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1">
+              <span className="text-xs text-slate-400 mr-1 w-full sm:w-auto mb-0.5 sm:mb-0">
+                Aspect Ratio:
+              </span>
               {RATIOS.map((r) => (
                 <button
                   key={r.id}
                   type="button"
                   onClick={() => setSelectedRatio(r.id)}
-                  className={`px-3 py-1.5 rounded text-xs font-mono-tabular font-medium border transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded text-xs font-mono-tabular font-medium border transition-colors cursor-pointer whitespace-nowrap min-h-[36px] ${
                     selectedRatio === r.id
                       ? 'bg-amber-500/15 border-amber-500 text-amber-300'
                       : 'bg-[#161A23] border-white/8 text-slate-300 hover:border-white/25'
@@ -206,11 +234,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
               ))}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5 sm:gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => onCreateNewVideo(selectedRatio)}
-                className="px-5 py-2.5 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-sm font-semibold flex items-center gap-2 cursor-pointer transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 rounded-md bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
                 <Plus className="w-4 h-4 stroke-[2.5]" />
                 <span>New Video</span>
@@ -219,7 +247,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2.5 rounded-md bg-[#181C26] hover:bg-[#212633] border border-white/10 text-slate-100 text-sm font-medium flex items-center gap-2 cursor-pointer transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-md bg-[#181C26] hover:bg-[#212633] border border-white/10 text-slate-100 text-sm font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
               >
                 <Upload className="w-4 h-4 text-sky-400" />
                 <span>Import & Edit Media</span>
@@ -228,13 +256,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenProject(currentProject)}
-                className="px-4 py-2.5 rounded-md bg-transparent hover:bg-white/5 border border-white/10 text-slate-300 hover:text-white text-sm font-medium flex items-center gap-2 cursor-pointer transition-colors"
+                className="w-full sm:w-auto min-h-[44px] px-4 py-2.5 rounded-md bg-transparent hover:bg-white/5 border border-white/10 text-slate-300 hover:text-white text-sm font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors truncate"
               >
-                <Film className="w-4 h-4 text-amber-400" />
-                <span>Resume "{currentProject.name}"</span>
+                <Film className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="truncate">Resume "{currentProject.name}"</span>
               </button>
 
-              <PWAInstallButton variant="hero" />
+              <PWAInstallButton variant="hero" className="w-full sm:w-auto min-h-[44px] justify-center" />
             </div>
           </div>
 
@@ -339,7 +367,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                         type="button"
                         onClick={() => setPreviewVideo(vid)}
                         title="Play video"
-                        className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                        className="absolute inset-0 bg-black/25 sm:bg-black/35 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
                       >
                         <span className="w-11 h-11 rounded-full bg-amber-500 text-[#0B0D11] flex items-center justify-center shadow-lg">
                           <Play className="w-5 h-5 fill-current ml-0.5" />

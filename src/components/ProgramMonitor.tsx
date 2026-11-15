@@ -265,29 +265,30 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
   return (
     <section
       ref={stageRef}
-      className="flex-1 min-w-0 bg-[#0B0D11] flex flex-col items-center justify-between p-4 min-h-0 select-none"
+      className="flex-1 min-w-0 bg-[#0B0D11] flex flex-col items-center justify-between p-2 sm:p-3 lg:p-4 min-h-0 select-none"
     >
       {/* Subtle Top Monitor Bar */}
-      <div className="w-full flex items-center justify-between text-xs text-slate-400 px-1 pb-2 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="w-full flex items-center justify-between text-[11px] sm:text-xs text-slate-400 px-1 pb-1.5 sm:pb-2 shrink-0 gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <span className="font-medium text-slate-200 truncate">{project.name}</span>
-          <span aria-hidden="true">·</span>
-          <span className="font-mono-tabular text-slate-400 shrink-0">
+          <span className="hidden sm:inline" aria-hidden="true">·</span>
+          <span className="font-mono-tabular text-slate-400 shrink-0 hidden sm:inline">
             {dims.width}×{dims.height}
           </span>
-          <span aria-hidden="true">·</span>
-          <span className="font-mono-tabular text-slate-400 shrink-0">{project.fps} fps</span>
+          <span className="hidden md:inline" aria-hidden="true">·</span>
+          <span className="font-mono-tabular text-slate-400 shrink-0 hidden md:inline">{project.fps} fps</span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {isPickingTrackTarget && (
             <button
               type="button"
               onClick={onCancelPickTrackTarget}
-              className="px-2.5 py-1 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[11px] font-medium flex items-center gap-1.5 cursor-pointer"
+              className="px-2 py-1 rounded bg-sky-500/20 border border-sky-400/50 text-sky-300 text-[11px] font-medium flex items-center gap-1 cursor-pointer"
             >
               <Crosshair className="w-3.5 h-3.5" />
-              <span>Click object in frame to track (Cancel)</span>
+              <span className="hidden sm:inline">Click object in frame to track (Cancel)</span>
+              <span className="sm:hidden">Cancel Track</span>
             </button>
           )}
           <button
@@ -301,7 +302,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
             }`}
           >
             <Grid className="w-3.5 h-3.5" />
-            <span>Guides</span>
+            <span className="hidden sm:inline">Guides</span>
           </button>
           <button
             type="button"
@@ -343,14 +344,14 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
       </div>
 
       {/* Transport Bar */}
-      <div className="w-full pt-3 flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-2 text-xs font-mono-tabular">
+      <div className="w-full pt-2 sm:pt-3 flex items-center justify-between gap-2 sm:gap-4 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 text-[11px] sm:text-xs font-mono-tabular shrink-0">
           <span className="text-amber-400 font-semibold">{formatTimecode(playheadTime)}</span>
           <span className="text-slate-600">/</span>
           <span className="text-slate-400">{formatTimecode(totalDuration)}</span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-0.5 sm:gap-1.5">
           <button
             type="button"
             onClick={() => onSeek(0)}
@@ -363,7 +364,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
             type="button"
             onClick={() => onStepFrame(-1)}
             title="Step Back 1 Frame (Left Arrow)"
-            className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/8 transition-colors cursor-pointer"
+            className="hidden xs:inline-flex sm:inline-flex p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/8 transition-colors cursor-pointer"
           >
             <SkipBack className="w-4 h-4" />
           </button>
@@ -371,7 +372,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
             type="button"
             onClick={onTogglePlay}
             title="Play / Pause (Space)"
-            className="w-9 h-9 rounded-full bg-amber-500 hover:bg-amber-400 text-[#0B0D11] flex items-center justify-center transition-colors cursor-pointer mx-1"
+            className="w-9 h-9 rounded-full bg-amber-500 hover:bg-amber-400 text-[#0B0D11] flex items-center justify-center transition-colors cursor-pointer mx-0.5 sm:mx-1"
           >
             {isPlaying ? (
               <Pause className="w-4 h-4 fill-current" />
@@ -383,7 +384,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
             type="button"
             onClick={() => onStepFrame(1)}
             title="Step Forward 1 Frame (Right Arrow)"
-            className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/8 transition-colors cursor-pointer"
+            className="hidden xs:inline-flex sm:inline-flex p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/8 transition-colors cursor-pointer"
           >
             <SkipForward className="w-4 h-4" />
           </button>
@@ -397,7 +398,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={onToggleLoop}
@@ -432,7 +433,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
             value={masterMuted ? 0 : masterVolume}
             onChange={(e) => onChangeVolume(parseFloat(e.target.value))}
             aria-label="Master monitor volume"
-            className="studio-slider w-16 hidden sm:block"
+            className="studio-slider w-16 hidden md:block"
           />
         </div>
       </div>

@@ -114,8 +114,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-lg bg-[#13161D] border border-white/10 shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/8 flex items-center justify-between">
+      <div className="w-full max-w-md max-h-[90dvh] flex flex-col rounded-lg bg-[#13161D] border border-white/10 shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/8 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Film className="w-4 h-4 text-amber-400" />
             <h2 className="font-display text-base font-semibold text-white">
@@ -131,7 +131,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <div className="flex items-center justify-between text-xs text-slate-400 pb-3 border-b border-white/8">
             <span>
               {dims.width} × {dims.height} · {options.fps} fps · {totalDuration.toFixed(1)}s
@@ -299,7 +299,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           {error && <p className="text-xs text-rose-400">{error}</p>}
         </div>
 
-        <div className="px-5 py-3.5 border-t border-white/8 bg-[#0E1117] flex justify-end gap-2">
+        <div className="px-5 py-3.5 border-t border-white/8 bg-[#0E1117] flex justify-end gap-2 shrink-0">
           {isExporting ? (
             <button
               type="button"

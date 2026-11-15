@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Film, Layers, SlidersHorizontal, Type, Wand2 } from 'lucide-react';
 import { ExportModal } from './components/ExportModal';
 import { HomeView } from './components/HomeView';
 import { InspectorPanel } from './components/InspectorPanel';
-import { MediaDrawer } from './components/MediaDrawer';
+import { DrawerTab, MediaDrawer } from './components/MediaDrawer';
 import { ProgramMonitor } from './components/ProgramMonitor';
 import { ProjectsModal } from './components/ProjectsModal';
 import { ShortcutsModal } from './components/ShortcutsModal';
@@ -73,6 +74,8 @@ export default function App() {
   const [exportAutoStart, setExportAutoStart] = useState(false);
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'drawer' | 'inspector' | null>(null);
+  const [mobileDrawerTab, setMobileDrawerTab] = useState<DrawerTab>('media');
 
   const [aiBusyTask, setAiBusyTask] = useState<string | null>(null);
   const [aiStatusMessage, setAiStatusMessage] = useState<{
@@ -849,6 +852,7 @@ export default function App() {
       if (clip) {
         setPlayheadTime(clip.startTime);
       }
+      setMobilePanel(null);
       setPickingTrackClipId((prev) => (prev === clipId ? null : clipId));
       setAiStatusMessage({
         type: 'info',
@@ -1136,8 +1140,17 @@ export default function App() {
     );
   }
 
+  const toggleMobileDrawerTab = (tab: DrawerTab) => {
+    if (mobilePanel === 'drawer' && mobileDrawerTab === tab) {
+      setMobilePanel(null);
+    } else {
+      setMobileDrawerTab(tab);
+      setMobilePanel('drawer');
+    }
+  };
+
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#0B0D11] text-[#F1F3F7]">
+    <div className="h-[100dvh] w-screen overflow-hidden flex flex-col bg-[#0B0D11] text-[#F1F3F7]">
       <TopBar
         aspectRatio={project.aspectRatio}
         canUndo={undoStack.length > 0}
@@ -1179,9 +1192,10 @@ export default function App() {
         }}
       />
 
-      {/* Upper 3-Column Studio Workspace */}
+      {/* Upper 3-Column Studio Workspace (Desktop sidebars hidden below lg, mobile renders ProgramMonitor full-width) */}
       <main className="flex-1 min-h-0 flex overflow-hidden">
         <MediaDrawer
+          className="hidden lg:flex w-76 xl:w-84 shrink-0 bg-[#11141B] border-r border-white/8 flex-col min-h-0 select-none"
           assets={assets}
           hasSelectedClip={Boolean(
             selectedClip && (selectedClip.kind === 'image' || selectedClip.kind === 'video')
@@ -1239,6 +1253,7 @@ export default function App() {
         />
 
         <InspectorPanel
+          className="hidden lg:flex w-76 xl:w-80 shrink-0 bg-[#11141B] border-l border-white/8 flex-col min-h-0 select-none"
           project={project}
           selectedClip={selectedClip}
           isMainTrackClip={isMainTrackClip}
@@ -1292,6 +1307,143 @@ export default function App() {
           );
         }}
       />
+
+      {/* Mobile Bottom Thumb Bar (CapCut / KineMaster touch layout) */}
+      <nav
+        aria-label="Mobile Studio Tools"
+        className="lg:hidden shrink-0 bg-[#0E1117] border-t border-white/10 grid grid-cols-5 items-stretch pb-safe"
+      >
+        <button
+          type="button"
+          onClick={() => toggleMobileDrawerTab('media')}
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+            mobilePanel === 'drawer' && mobileDrawerTab === 'media'
+              ? 'text-amber-400 bg-white/[0.04]'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          <Film className="w-4 h-4" />
+          <span>Media</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleMobileDrawerTab('effects')}
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+            mobilePanel === 'drawer' && mobileDrawerTab === 'effects'
+              ? 'text-amber-400 bg-white/[0.04]'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          <Wand2 className="w-4 h-4" />
+          <span>Effects</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleMobileDrawerTab('transitions')}
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+            mobilePanel === 'drawer' && mobileDrawerTab === 'transitions'
+              ? 'text-amber-400 bg-white/[0.04]'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          <span>Trans.</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => toggleMobileDrawerTab('text')}
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+            mobilePanel === 'drawer' &&
+            (mobileDrawerTab === 'text' ||
+              mobileDrawerTab === 'audio' ||
+              mobileDrawerTab === 'filters' ||
+              mobileDrawerTab === 'stickers')
+              ? 'text-amber-400 bg-white/[0.04]'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          <Type className="w-4 h-4" />
+          <span>Overlay</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setMobilePanel((prev) => (prev === 'inspector' ? null : 'inspector'))
+          }
+          className={`min-h-[48px] py-1.5 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium cursor-pointer transition-colors ${
+            mobilePanel === 'inspector'
+              ? 'text-amber-400 bg-white/[0.04]'
+              : 'text-slate-300 hover:text-white'
+          }`}
+        >
+          <SlidersHorizontal className="w-4 h-4" />
+          <span>{selectedClip ? 'Edit / AI' : 'Settings'}</span>
+        </button>
+      </nav>
+
+      {/* Mobile Slide-Up Bottom Sheet keeping ProgramMonitor visible above */}
+      {mobilePanel && (
+        <div className="lg:hidden fixed inset-x-0 bottom-0 top-[34dvh] z-40 rounded-t-2xl bg-[#11141B] border-t border-white/15 shadow-[0_-12px_40px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden pb-safe">
+          {mobilePanel === 'drawer' ? (
+            <MediaDrawer
+              className="flex-1 w-full min-h-0 bg-[#11141B] flex flex-col select-none"
+              controlledTab={mobileDrawerTab}
+              onTabChange={setMobileDrawerTab}
+              onMobileClose={() => setMobilePanel(null)}
+              assets={assets}
+              hasSelectedClip={Boolean(
+                selectedClip && (selectedClip.kind === 'image' || selectedClip.kind === 'video')
+              )}
+              selectedClipSupportsTransition={isMainTrackClip}
+              activeFilterId={selectedClip?.color.preset || 'none'}
+              activeTransitionType={selectedClip?.transitionIn.type || 'none'}
+              activeEffectTypes={(selectedClip?.effects || [])
+                .filter((fx) => fx.enabled)
+                .map((fx) => fx.type)}
+              onImportFiles={handleImportFiles}
+              onImportRecordedAudio={handleImportRecordedAudio}
+              onAddMediaClip={(asset, type) => {
+                handleAddMediaClip(asset, type);
+                setMobilePanel(null);
+              }}
+              onAddTextClip={(preset) => {
+                handleAddTextClip(preset);
+                setMobilePanel(null);
+              }}
+              onAddStickerClip={(preset) => {
+                handleAddStickerClip(preset);
+                setMobilePanel(null);
+              }}
+              onApplyFilter={handleApplyFilter}
+              onToggleEffect={handleToggleEffect}
+              onApplyTransition={handleApplyTransition}
+            />
+          ) : (
+            <InspectorPanel
+              className="flex-1 w-full min-h-0 bg-[#11141B] flex flex-col select-none"
+              onMobileClose={() => setMobilePanel(null)}
+              project={project}
+              selectedClip={selectedClip}
+              isMainTrackClip={isMainTrackClip}
+              aiBusyTask={aiBusyTask}
+              aiStatusMessage={aiStatusMessage}
+              isPickingTrackTarget={Boolean(pickingTrackClipId)}
+              onUpdateProject={(patch) => commitProjectChange((p) => ({ ...p, ...patch }))}
+              onUpdateClip={handleUpdateClip}
+              onSplitClip={(id) => handleSplitClip(id)}
+              onDuplicateClip={(id) => handleDuplicateClip(id)}
+              onDeleteClip={(id) => handleDeleteClip(id)}
+              onRunBackgroundRemoval={handleRunBackgroundRemoval}
+              onRunGenerateSubtitles={handleRunGenerateSubtitles}
+              onStartPickTrackTarget={handleStartPickTrackTarget}
+            />
+          )}
+        </div>
+      )}
 
       {showExportModal && (
         <ExportModal

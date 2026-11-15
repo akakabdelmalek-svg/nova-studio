@@ -206,15 +206,15 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   return (
-    <section className="h-64 lg:h-72 shrink-0 bg-[#11141B] border-t border-white/8 flex flex-col min-h-0 select-none">
+    <section className="h-44 sm:h-52 lg:h-72 shrink-0 bg-[#11141B] border-t border-white/8 flex flex-col min-h-0 select-none">
       {/* Timeline Action Toolbar */}
-      <div className="h-10 px-4 border-b border-white/8 bg-[#0E1117] flex items-center justify-between gap-4 shrink-0">
-        <div className="flex items-center gap-1.5">
+      <div className="h-10 px-2 sm:px-4 border-b border-white/8 bg-[#0E1117] flex items-center justify-between gap-2 sm:gap-4 shrink-0 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           <button
             type="button"
             onClick={onSplitAtPlayhead}
             title="Split Clip at Playhead (S)"
-            className="px-2.5 py-1 rounded text-xs font-medium text-slate-200 hover:bg-white/8 flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="px-2 sm:px-2.5 py-1 rounded text-xs font-medium text-slate-200 hover:bg-white/8 flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Scissors className="w-3.5 h-3.5 text-amber-400" />
             <span>Split</span>
@@ -225,10 +225,10 @@ export const Timeline: React.FC<TimelineProps> = ({
             disabled={!selectedClipId}
             onClick={onDuplicateSelected}
             title="Duplicate Selected Clip"
-            className="px-2.5 py-1 rounded text-xs font-medium text-slate-200 hover:bg-white/8 disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="px-2 sm:px-2.5 py-1 rounded text-xs font-medium text-slate-200 hover:bg-white/8 disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Copy className="w-3.5 h-3.5" />
-            <span>Duplicate</span>
+            <span className="hidden sm:inline">Duplicate</span>
           </button>
 
           <button
@@ -236,59 +236,60 @@ export const Timeline: React.FC<TimelineProps> = ({
             disabled={!selectedClipId}
             onClick={onDeleteSelected}
             title="Delete Selected Clip (Del)"
-            className="px-2.5 py-1 rounded text-xs font-medium text-rose-400 hover:bg-rose-500/10 disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="px-2 sm:px-2.5 py-1 rounded text-xs font-medium text-rose-400 hover:bg-rose-500/10 disabled:text-slate-600 disabled:cursor-not-allowed flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete</span>
+            <span className="hidden sm:inline">Delete</span>
           </button>
 
-          <span className="h-4 w-px bg-white/10 mx-1" aria-hidden="true" />
+          <span className="h-4 w-px bg-white/10 mx-0.5 sm:mx-1" aria-hidden="true" />
 
           <button
             type="button"
             onClick={onToggleSnap}
             title="Toggle Magnetic Snapping"
-            className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`px-2 sm:px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
               snapEnabled
                 ? 'bg-amber-500/15 text-amber-400'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >
             <Magnet className="w-3.5 h-3.5" />
-            <span>Snap</span>
+            <span className="hidden sm:inline">Snap</span>
           </button>
         </div>
 
         {/* Track Adder & Zoom */}
-        <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-1">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             <button
               type="button"
               onClick={() => onAddTrack('overlay')}
-              className="px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="px-1.5 sm:px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3 h-3 text-sky-400" />
-              Overlay
+              <span className="hidden xs:inline sm:inline">Overlay</span>
+              <span className="sm:hidden">PiP</span>
             </button>
             <button
               type="button"
               onClick={() => onAddTrack('text')}
-              className="px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="px-1.5 sm:px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3 h-3 text-violet-400" />
-              Text
+              <span>Text</span>
             </button>
             <button
               type="button"
               onClick={() => onAddTrack('audio')}
-              className="px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="px-1.5 sm:px-2 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white hover:bg-white/8 flex items-center gap-1 cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-3 h-3 text-emerald-400" />
-              Audio
+              <span>Audio</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             <button
               type="button"
               onClick={() => onChangeZoom(Math.max(24, zoomPxPerSec - 15))}
@@ -304,7 +305,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               value={zoomPxPerSec}
               onChange={(e) => onChangeZoom(parseInt(e.target.value, 10))}
               aria-label="Timeline zoom"
-              className="studio-slider w-20"
+              className="studio-slider w-14 sm:w-20"
             />
             <button
               type="button"
@@ -321,9 +322,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* Main Timeline Body: Track Headers Left + Scrollable Lanes Right */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* Track Headers Column */}
-        <div className="w-44 shrink-0 border-r border-white/8 bg-[#0E1117] flex flex-col">
+        <div className="w-24 sm:w-36 lg:w-44 shrink-0 border-r border-white/8 bg-[#0E1117] flex flex-col">
           {/* Corner cell matching ruler height */}
-          <div className="h-7 border-b border-white/8 px-3 flex items-center justify-between text-[11px] font-mono-tabular text-slate-400 shrink-0">
+          <div className="h-7 border-b border-white/8 px-2 sm:px-3 flex items-center justify-between text-[10px] sm:text-[11px] font-mono-tabular text-slate-400 shrink-0">
             <span>Tracks</span>
             <span>{project.tracks.length}</span>
           </div>
@@ -349,7 +350,7 @@ export const Timeline: React.FC<TimelineProps> = ({
             {/* Sticky Time Ruler */}
             <div
               onPointerDown={handleRulerPointerDown}
-              className="sticky top-0 z-20 h-7 bg-[#11141B] border-b border-white/10 cursor-pointer"
+              className="sticky top-0 z-20 h-7 bg-[#11141B] border-b border-white/10 cursor-pointer touch-none"
             >
               {ticks.map((t) => (
                 <div
@@ -396,7 +397,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                             onSelectClip(clip.id);
                           }}
                           style={{ left: `${leftPx}px`, width: `${widthPx}px` }}
-                          className={`absolute top-1.5 bottom-1.5 rounded overflow-hidden border cursor-grab active:cursor-grabbing transition-shadow ${
+                          className={`absolute top-1.5 bottom-1.5 rounded overflow-hidden border cursor-grab active:cursor-grabbing touch-none transition-shadow ${
                             TRACK_COLORS[track.type]
                           } ${isSelected ? 'ring-2 ring-amber-400 border-amber-400 z-10' : 'hover:border-white/30'}`}
                         >
@@ -466,12 +467,12 @@ export const Timeline: React.FC<TimelineProps> = ({
                           <div
                             onPointerDown={(e) => startDragClip(e, clip, 'trim-left')}
                             title="Drag to trim start"
-                            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400/70 z-20"
+                            className="absolute left-0 top-0 bottom-0 w-3.5 sm:w-2 cursor-ew-resize hover:bg-amber-400/70 active:bg-amber-400/80 z-20 touch-none"
                           />
                           <div
                             onPointerDown={(e) => startDragClip(e, clip, 'trim-right')}
                             title="Drag to trim end"
-                            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-amber-400/70 z-20"
+                            className="absolute right-0 top-0 bottom-0 w-3.5 sm:w-2 cursor-ew-resize hover:bg-amber-400/70 active:bg-amber-400/80 z-20 touch-none"
                           />
                         </div>
                       );
@@ -507,9 +508,11 @@ const TrackHeaderRow: React.FC<{
   track: Track;
   onToggleProp: (trackId: string, prop: 'muted' | 'hidden' | 'locked') => void;
 }> = ({ track, onToggleProp }) => (
-  <div className="h-13 px-2.5 flex items-center justify-between gap-1">
-    <span className="text-[11px] font-medium text-slate-300 truncate">{track.name}</span>
-    <div className="flex items-center gap-0.5 shrink-0">
+  <div className="h-13 px-1.5 sm:px-2.5 flex items-center justify-between gap-0.5 sm:gap-1">
+    <span className="text-[10px] sm:text-[11px] font-medium text-slate-300 truncate">
+      {track.name}
+    </span>
+    <div className="flex items-center gap-0 sm:gap-0.5 shrink-0">
       {(track.type === 'audio' || track.type === 'video') && (
         <button
           type="button"

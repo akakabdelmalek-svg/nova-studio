@@ -18,7 +18,7 @@ const SHORTCUTS = [
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-lg bg-[#13161D] border border-white/10 shadow-2xl overflow-hidden">
+      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-lg bg-[#13161D] border border-white/10 shadow-2xl">
         <div className="px-5 py-4 border-b border-white/8 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Keyboard className="w-4 h-4 text-amber-400" />

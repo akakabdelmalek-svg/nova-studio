@@ -17,6 +17,7 @@ import {
   Type,
   Upload,
   Wand2,
+  X,
 } from 'lucide-react';
 import {
   AudioGenre,
@@ -70,6 +71,10 @@ interface MediaDrawerProps {
   onApplyFilter: (presetId: FilterPresetId) => void;
   onToggleEffect: (effectType: VideoEffectType) => void;
   onApplyTransition: (type: TransitionType) => void;
+  controlledTab?: DrawerTab;
+  onTabChange?: (tab: DrawerTab) => void;
+  className?: string;
+  onMobileClose?: () => void;
 }
 
 const TABS: Array<{ id: DrawerTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -144,8 +149,17 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
   onApplyFilter,
   onToggleEffect,
   onApplyTransition,
+  controlledTab,
+  onTabChange,
+  className,
+  onMobileClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<DrawerTab>('media');
+  const [internalTab, setInternalTab] = useState<DrawerTab>('media');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: DrawerTab) => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
   const [isDragOver, setIsDragOver] = useState(false);
 
   const [audioSearch, setAudioSearch] = useState('');
@@ -250,9 +264,31 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
   };
 
   return (
-    <aside className="w-76 xl:w-84 shrink-0 bg-[#11141B] border-r border-white/8 flex flex-col min-h-0 select-none">
+    <aside
+      className={
+        className ||
+        'w-76 xl:w-84 shrink-0 bg-[#11141B] border-r border-white/8 flex flex-col min-h-0 select-none'
+      }
+    >
+      {onMobileClose && (
+        <div className="lg:hidden px-3.5 pt-2 pb-1.5 border-b border-white/8 bg-[#0E1117] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="w-8 h-1 rounded-full bg-white/25" aria-hidden="true" />
+            <span className="text-xs font-semibold text-slate-200 capitalize">{activeTab}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onMobileClose}
+            className="px-2.5 py-1 rounded bg-white/8 hover:bg-white/15 text-xs font-medium text-slate-200 flex items-center gap-1 cursor-pointer min-h-[32px]"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Done</span>
+          </button>
+        </div>
+      )}
+
       {/* Scrollable Horizontal Icon + Label Rail */}
-      <div className="flex overflow-x-auto border-b border-white/8 bg-[#0E1117] shrink-0">
+      <div className="flex overflow-x-auto no-scrollbar border-b border-white/8 bg-[#0E1117] shrink-0">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -261,7 +297,7 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center gap-1 px-3 py-2.5 text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 border-b-2 ${
+              className={`flex flex-col items-center justify-center gap-1 px-3 py-2.5 text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 border-b-2 min-h-[44px] ${
                 active
                   ? 'text-amber-400 border-amber-500 bg-[#161A23]'
                   : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/[0.03]'
@@ -355,7 +391,7 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
                         </div>
                       )}
 
-                      <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
+                      <div className="absolute inset-0 bg-black/45 lg:bg-black/55 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-1">
                         <button
                           type="button"
                           onClick={() => onAddMediaClip(asset, 'video')}
