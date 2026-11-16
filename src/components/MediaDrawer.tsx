@@ -22,6 +22,7 @@ import {
 import {
   AudioGenre,
   AudioMood,
+  CustomFontRecord,
   EffectCategory,
   FilterPresetId,
   MediaAsset,
@@ -40,6 +41,7 @@ import {
   TRANSITION_PRESETS,
   formatTimecode,
 } from '../utils/defaults';
+import { EffectPreviewCanvas, TransitionPreviewCanvas } from './EffectTransitionPreview';
 
 export type DrawerTab =
   | 'media'
@@ -71,6 +73,8 @@ interface MediaDrawerProps {
   onApplyFilter: (presetId: FilterPresetId) => void;
   onToggleEffect: (effectType: VideoEffectType) => void;
   onApplyTransition: (type: TransitionType) => void;
+  customFonts?: CustomFontRecord[];
+  onImportFonts?: (files: FileList) => void;
   controlledTab?: DrawerTab;
   onTabChange?: (tab: DrawerTab) => void;
   className?: string;
@@ -149,6 +153,8 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
   onApplyFilter,
   onToggleEffect,
   onApplyTransition,
+  customFonts = [],
+  onImportFonts,
   controlledTab,
   onTabChange,
   className,
@@ -171,13 +177,16 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
 
   const [effectSearch, setEffectSearch] = useState('');
   const [effectCategory, setEffectCategory] = useState<EffectCategory>('All');
+  const [previewEffectType, setPreviewEffectType] = useState<VideoEffectType | null>(null);
 
   const [transitionSearch, setTransitionSearch] = useState('');
   const [transitionCategory, setTransitionCategory] = useState<TransitionCategory>('All');
+  const [previewTransitionType, setPreviewTransitionType] = useState<TransitionType | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fontInputRef = useRef<HTMLInputElement>(null);
 
   const visualAssets = assets.filter((a) => a.kind !== 'audio');
 
@@ -426,163 +435,310 @@ export const MediaDrawer: React.FC<MediaDrawerProps> = ({
           </>
         )}
 
-        {activeTab === 'effects' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold text-slate-200">Video Effects</h2>
-              <span className="text-[11px] font-mono-tabular text-slate-400">
-                {filteredEffects.length} free FX
-              </span>
-            </div>
+        {activeTab === 'effects' && (() => {
+          const spotlightType =
+            previewEffectType ||
+            activeEffectTypes[0] ||
+            filteredEffects[0]?.type ||
+            EFFECT_PRESETS[0]?.type;
+          const spotlightFx =
+            EFFECT_PRESETS.find((f) => f.type === spotlightType) || filteredEffects[0] || EFFECT_PRESETS[0];
+          const spotlightActive = spotlightFx ? activeEffectTypes.includes(spotlightFx.type) : false;
 
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={effectSearch}
-                onChange={(e) => setEffectSearch(e.target.value)}
-                placeholder="Search Nova, Matrix, Plasma, Ice, Fire, VHS..."
-                className="w-full pl-8 pr-2.5 py-1.5 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
-              />
-            </div>
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold text-slate-200">Video Effects</h2>
+                <span className="text-[11px] font-mono-tabular text-slate-400">
+                  {filteredEffects.length} live FX
+                </span>
+              </div>
 
-            <div className="flex flex-wrap gap-1">
-              {EFFECT_CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setEffectCategory(cat)}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                    effectCategory === cat
-                      ? 'bg-amber-500 text-[#0B0D11]'
-                      : 'bg-[#161A23] text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {cat === 'All' ? 'All' : cat.split(' & ')[0]}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              {filteredEffects.map((fx) => {
-                const isActive = activeEffectTypes.includes(fx.type);
-                return (
-                  <button
-                    key={fx.type}
-                    type="button"
-                    onClick={() => onToggleEffect(fx.type)}
-                    title={fx.description}
-                    className={`p-2 rounded-md border text-left transition-colors cursor-pointer ${
-                      isActive
-                        ? 'border-amber-500 bg-amber-500/12'
-                        : 'border-white/8 bg-[#161A23] hover:border-white/25'
-                    }`}
-                  >
-                    <div
-                      className="h-9 rounded mb-1.5 border border-white/10 flex items-center justify-end p-1.5"
-                      style={{ background: fx.swatch }}
+              {spotlightFx && (
+                <div className="rounded-md bg-[#0B0D11] border border-white/10 overflow-hidden">
+                  <div className="aspect-video w-full bg-black relative">
+                    <EffectPreviewCanvas
+                      effectType={spotlightFx.type}
+                      width={240}
+                      height={135}
+                      priority
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-medium text-amber-300">
+                      Live Preview
+                    </div>
+                  </div>
+                  <div className="p-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{spotlightFx.label}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{spotlightFx.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onToggleEffect(spotlightFx.type)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer whitespace-nowrap shrink-0 ${
+                        spotlightActive
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'bg-amber-500 hover:bg-amber-400 text-[#0B0D11]'
+                      }`}
                     >
-                      {isActive && (
-                        <span className="w-4 h-4 rounded-full bg-amber-500 text-[#0B0D11] flex items-center justify-center">
-                          <Check className="w-3 h-3 stroke-[3]" />
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs font-semibold text-slate-100 block truncate">
-                      {fx.label}
-                    </span>
-                    <span className="text-[10px] text-slate-400 block truncate">
-                      {fx.category}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                      {spotlightActive ? 'Remove' : 'Apply'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-        {activeTab === 'transitions' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold text-slate-200">Transitions</h2>
-              <span className="text-[11px] font-mono-tabular text-slate-400">
-                {filteredTransitions.length} free
-              </span>
-            </div>
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={effectSearch}
+                  onChange={(e) => setEffectSearch(e.target.value)}
+                  placeholder="Search Nova, Matrix, Plasma, Ice, Fire, VHS..."
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
 
-            <p className="text-[11px] text-slate-400 leading-snug">
-              {selectedClipSupportsTransition
-                ? 'Click any transition to apply it to the selected Main Video clip.'
-                : 'Click any transition to apply it to the active Main Video clip.'}
-            </p>
-
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={transitionSearch}
-                onChange={(e) => setTransitionSearch(e.target.value)}
-                placeholder="Search Spin Zoom, Portal, Galaxy, Quantum, Nova..."
-                className="w-full pl-8 pr-2.5 py-1.5 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-1">
-              {TRANSITION_CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setTransitionCategory(cat)}
-                  className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                    transitionCategory === cat
-                      ? 'bg-amber-500 text-[#0B0D11]'
-                      : 'bg-[#161A23] text-slate-300 hover:text-white'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-1.5">
-              {filteredTransitions.map((tr) => {
-                const isActive = activeTransitionType === tr.type;
-                return (
+              <div className="flex flex-wrap gap-1">
+                {EFFECT_CATEGORIES.map((cat) => (
                   <button
-                    key={tr.type}
+                    key={cat}
                     type="button"
-                    onClick={() => onApplyTransition(tr.type)}
-                    className={`w-full text-left p-2.5 rounded-md border transition-colors cursor-pointer ${
-                      isActive
-                        ? 'border-amber-500 bg-amber-500/12'
-                        : 'border-white/8 bg-[#161A23] hover:border-white/25'
+                    onClick={() => setEffectCategory(cat)}
+                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                      effectCategory === cat
+                        ? 'bg-amber-500 text-[#0B0D11]'
+                        : 'bg-[#161A23] text-slate-300 hover:text-white'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-slate-100 truncate">
-                        {tr.label}
-                      </span>
-                      <span className="text-[10px] text-slate-400 shrink-0">
-                        {isActive ? (
-                          <span className="text-amber-400 font-semibold">Active</span>
-                        ) : (
-                          tr.category
-                        )}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">{tr.description}</p>
+                    {cat === 'All' ? 'All' : cat.split(' & ')[0]}
                   </button>
-                );
-              })}
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {filteredEffects.map((fx) => {
+                  const isActive = activeEffectTypes.includes(fx.type);
+                  return (
+                    <button
+                      key={fx.type}
+                      type="button"
+                      onClick={() => {
+                        setPreviewEffectType(fx.type);
+                        onToggleEffect(fx.type);
+                      }}
+                      onMouseEnter={() => setPreviewEffectType(fx.type)}
+                      onFocus={() => setPreviewEffectType(fx.type)}
+                      title={fx.description}
+                      className={`p-1.5 rounded-md border text-left transition-colors cursor-pointer ${
+                        isActive
+                          ? 'border-amber-500 bg-amber-500/12'
+                          : 'border-white/8 bg-[#161A23] hover:border-white/25'
+                      }`}
+                    >
+                      <div className="aspect-video rounded mb-1.5 border border-white/10 overflow-hidden relative bg-[#0B0D11]">
+                        <EffectPreviewCanvas
+                          effectType={fx.type}
+                          width={144}
+                          height={81}
+                          className="w-full h-full object-cover block"
+                        />
+                        {isActive && (
+                          <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-amber-500 text-[#0B0D11] flex items-center justify-center shadow">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-100 block truncate px-0.5">
+                        {fx.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block truncate px-0.5">
+                        {fx.category}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
+
+        {activeTab === 'transitions' && (() => {
+          const spotlightTrType =
+            previewTransitionType ||
+            (activeTransitionType !== 'none' ? activeTransitionType : null) ||
+            filteredTransitions[1]?.type ||
+            filteredTransitions[0]?.type ||
+            'dissolve';
+          const spotlightTr =
+            TRANSITION_PRESETS.find((tr) => tr.type === spotlightTrType) || filteredTransitions[0];
+          const spotlightActive = spotlightTr ? activeTransitionType === spotlightTr.type : false;
+
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs font-semibold text-slate-200">Transitions</h2>
+                <span className="text-[11px] font-mono-tabular text-slate-400">
+                  {filteredTransitions.length} animated
+                </span>
+              </div>
+
+              {spotlightTr && (
+                <div className="rounded-md bg-[#0B0D11] border border-white/10 overflow-hidden">
+                  <div className="aspect-video w-full bg-black relative">
+                    <TransitionPreviewCanvas
+                      transitionType={spotlightTr.type}
+                      width={240}
+                      height={135}
+                      priority
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-medium text-sky-300">
+                      Scene A → B Preview
+                    </div>
+                  </div>
+                  <div className="p-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{spotlightTr.label}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{spotlightTr.description}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onApplyTransition(spotlightTr.type)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-semibold cursor-pointer whitespace-nowrap shrink-0 ${
+                        spotlightActive
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'bg-amber-500 hover:bg-amber-400 text-[#0B0D11]'
+                      }`}
+                    >
+                      {spotlightActive ? 'Active' : 'Apply'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] text-slate-400 leading-snug">
+                {selectedClipSupportsTransition
+                  ? 'Click any transition to apply it to the selected Main Video clip.'
+                  : 'Click any transition to apply it to the active Main Video clip.'}
+              </p>
+
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={transitionSearch}
+                  onChange={(e) => setTransitionSearch(e.target.value)}
+                  placeholder="Search Spin Zoom, Portal, Galaxy, Quantum, Nova..."
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-1">
+                {TRANSITION_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setTransitionCategory(cat)}
+                    className={`px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                      transitionCategory === cat
+                        ? 'bg-amber-500 text-[#0B0D11]'
+                        : 'bg-[#161A23] text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-1.5">
+                {filteredTransitions.map((tr) => {
+                  const isActive = activeTransitionType === tr.type;
+                  return (
+                    <button
+                      key={tr.type}
+                      type="button"
+                      onClick={() => {
+                        setPreviewTransitionType(tr.type);
+                        onApplyTransition(tr.type);
+                      }}
+                      onMouseEnter={() => setPreviewTransitionType(tr.type)}
+                      onFocus={() => setPreviewTransitionType(tr.type)}
+                      className={`w-full text-left p-2 rounded-md border transition-colors cursor-pointer flex items-center gap-2.5 ${
+                        isActive
+                          ? 'border-amber-500 bg-amber-500/12'
+                          : 'border-white/8 bg-[#161A23] hover:border-white/25'
+                      }`}
+                    >
+                      <div className="w-20 aspect-video rounded overflow-hidden border border-white/10 bg-[#0B0D11] shrink-0">
+                        <TransitionPreviewCanvas
+                          transitionType={tr.type}
+                          width={112}
+                          height={63}
+                          className="w-full h-full object-cover block"
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-slate-100 truncate">
+                            {tr.label}
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {isActive ? (
+                              <span className="text-amber-400 font-semibold">Active</span>
+                            ) : (
+                              tr.category
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-0.5 truncate">{tr.description}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {activeTab === 'text' && (
           <div className="space-y-2.5">
             <p className="text-xs text-slate-400">
-              Click a title preset to insert an editable text layer at the playhead.
+              Insert an editable title preset, then customize with all Microsoft Word fonts or your own imported fonts in Style.
             </p>
+            {onImportFonts && (
+              <div className="p-2.5 rounded-md bg-[#161A23] border border-white/8 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-xs font-semibold text-slate-200 block">Custom Fonts</span>
+                  <span className="text-[11px] text-slate-400 block truncate">
+                    {customFonts.length > 0
+                      ? `${customFonts.length} custom font${customFonts.length > 1 ? 's' : ''} loaded`
+                      : 'Import .ttf, .otf, .woff, .woff2'}
+                  </span>
+                </div>
+                <input
+                  ref={fontInputRef}
+                  type="file"
+                  multiple
+                  accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      onImportFonts(e.target.files);
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fontInputRef.current?.click()}
+                  className="px-2.5 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-[#0B0D11] text-[11px] font-semibold flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Import Font</span>
+                </button>
+              </div>
+            )}
             {TEXT_PRESETS.map((preset) => (
               <button
                 key={preset.id}

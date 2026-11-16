@@ -1,38 +1,61 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Captions,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Crosshair,
+  Diamond,
   Eraser,
   FlipHorizontal,
   FlipVertical,
   Loader2,
+  Plus,
   RotateCcw,
   Scissors,
+  Search,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
 import {
   AnimationPreset,
   AspectRatio,
+  CustomFontRecord,
+  KeyframeEasing,
   ProjectState,
   TimelineClip,
+  TransformKeyframe,
   TransitionType,
 } from '../types/studio';
+import { evaluateClipTransform } from '../utils/canvasRenderer';
 import {
   ASPECT_RATIO_DIMENSIONS,
   TRANSITION_PRESETS,
   createDefaultColor,
   createDefaultTransform,
+  uid,
 } from '../utils/defaults';
+import {
+  ALL_BUILTIN_FONTS,
+  FontCategory,
+  FontOption,
+  buildCanvasFontCss,
+} from '../utils/fonts';
 
 interface InspectorPanelProps {
   project: ProjectState;
   selectedClip: TimelineClip | null;
   isMainTrackClip: boolean;
+  playheadTime: number;
   aiBusyTask: string | null;
   aiStatusMessage: { type: 'info' | 'error'; text: string } | null;
   isPickingTrackTarget: boolean;
+  customFonts?: CustomFontRecord[];
+  onSeek: (time: number) => void;
+  onImportFonts?: (files: FileList) => void;
+  onDeleteCustomFont?: (fontId: string) => void;
   onUpdateProject: (patch: Partial<ProjectState>) => void;
   onUpdateClip: (clipId: string, updater: (clip: TimelineClip) => TimelineClip) => void;
   onSplitClip: (clipId: string) => void;
@@ -56,13 +79,47 @@ const ANIM_OPTIONS: Array<{ value: AnimationPreset; label: string }> = [
   { value: 'zoomIn', label: 'Zoom Push' },
 ];
 
+const EASING_OPTIONS: Array<{ value: KeyframeEasing; label: string }> = [
+  { value: 'easeInOut', label: 'Ease In-Out' },
+  { value: 'linear', label: 'Linear' },
+  { value: 'easeIn', label: 'Ease In' },
+  { value: 'easeOut', label: 'Ease Out' },
+];
+
+const PIVOT_GRID_PRESETS: Array<{ label: string; px: number; py: number }> = [
+  { label: 'Top-Left', px: -1, py: -1 },
+  { label: 'Top', px: 0, py: -1 },
+  { label: 'Top-Right', px: 1, py: -1 },
+  { label: 'Left', px: -1, py: 0 },
+  { label: 'Center', px: 0, py: 0 },
+  { label: 'Right', px: 1, py: 0 },
+  { label: 'Bottom-Left', px: -1, py: 1 },
+  { label: 'Bottom', px: 0, py: 1 },
+  { label: 'Bottom-Right', px: 1, py: 1 },
+];
+
+const FONT_CATEGORIES: FontCategory[] = [
+  'All',
+  'Custom',
+  'MS Word Sans',
+  'MS Word Serif',
+  'Display & Script',
+  'MS Word Mono',
+  'Studio',
+];
+
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   project,
   selectedClip,
   isMainTrackClip,
+  playheadTime,
   aiBusyTask,
   aiStatusMessage,
   isPickingTrackTarget,
+  customFonts = [],
+  onSeek,
+  onImportFonts,
+  onDeleteCustomFont,
   onUpdateProject,
   onUpdateClip,
   onSplitClip,
@@ -75,6 +132,34 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   onMobileClose,
 }) => {
   const [tab, setTab] = useState<InspectorTab>('basic');
+  const [fontPickerOpen, setFontPickerOpen] = useState(false);
+  const [fontSearch, setFontSearch] = useState('');
+  const [fontCategory, setFontCategory] = useState<FontCategory>('All');
+  const [defaultEasing, setDefaultEasing] = useState<KeyframeEasing>('easeInOut');
+  const fontInputRef = useRef<HTMLInputElement>(null);
+
+  const allFonts = useMemo<FontOption[]>(() => {
+    const customOptions: FontOption[] = customFonts.map((cf) => ({
+      family: cf.family,
+      label: cf.family,
+      category: 'Custom',
+      fallbackStack: 'sans-serif',
+      isCustom: true,
+      customId: cf.id,
+    }));
+    return [...customOptions, ...ALL_BUILTIN_FONTS];
+  }, [customFonts]);
+
+  const filteredFonts = useMemo(() => {
+    const q = fontSearch.trim().toLowerCase();
+    return allFonts.filter((f) => {
+      if (fontCategory !== 'All' && f.category !== fontCategory) return false;
+      if (q) {
+        return `${f.label} ${f.family} ${f.category}`.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [allFonts, fontSearch, fontCategory]);
 
   if (!selectedClip) {
     return (
@@ -294,18 +379,114 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
           </div>
         )}
 
-        {activeTab === 'basic' && (
+        {activeTab === 'basic' && (() => {
+          const localTime = Number(
+            Math.max(0, Math.min(selectedClip.duration, playheadTime - selectedClip.startTime)).toFixed(3)
+          );
+          const evaluatedTf = evaluateClipTransform(selectedClip, localTime);
+          const sortedKeyframes = [...(selectedClip.keyframes || [])].sort(
+            (a, b) => a.time - b.time
+          );
+          const activeKf = sortedKeyframes.find((k) => Math.abs(k.time - localTime) <= 0.08) || null;
+          const prevKf = [...sortedKeyframes].reverse().find((k) => k.time < localTime - 0.08) || null;
+          const nextKf = sortedKeyframes.find((k) => k.time > localTime + 0.08) || null;
+
+          const applyTransformPatch = (
+            patch: Partial<{
+              x: number;
+              y: number;
+              scale: number;
+              rotation: number;
+              opacity: number;
+              pivotX: number;
+              pivotY: number;
+            }>
+          ) => {
+            onUpdateClip(selectedClip.id, (c) => {
+              const curEval = evaluateClipTransform(c, localTime);
+              const nextVals = {
+                x: patch.x ?? curEval.x,
+                y: patch.y ?? curEval.y,
+                scale: patch.scale ?? curEval.scale,
+                rotation: patch.rotation ?? curEval.rotation,
+                opacity: patch.opacity ?? curEval.opacity,
+                pivotX: patch.pivotX ?? curEval.pivotX,
+                pivotY: patch.pivotY ?? curEval.pivotY,
+              };
+              const list = [...(c.keyframes || [])];
+              if (list.length === 0) {
+                return {
+                  ...c,
+                  transform: { ...c.transform, ...nextVals },
+                };
+              }
+              const idx = list.findIndex((k) => Math.abs(k.time - localTime) <= 0.08);
+              if (idx >= 0) {
+                list[idx] = { ...list[idx], ...nextVals };
+              } else {
+                list.push({
+                  id: uid('kf'),
+                  time: localTime,
+                  ...nextVals,
+                  easing: defaultEasing,
+                });
+                list.sort((a, b) => a.time - b.time);
+              }
+              return {
+                ...c,
+                transform: { ...c.transform, ...nextVals },
+                keyframes: list,
+              };
+            });
+          };
+
+          const handleToggleOrUpdateKeyframe = () => {
+            onUpdateClip(selectedClip.id, (c) => {
+              const list = [...(c.keyframes || [])];
+              const existingIdx = list.findIndex((k) => Math.abs(k.time - localTime) <= 0.08);
+              if (existingIdx >= 0) {
+                list.splice(existingIdx, 1);
+                return { ...c, keyframes: list };
+              }
+              const cur = evaluateClipTransform(c, localTime);
+              const created: TransformKeyframe = {
+                id: uid('kf'),
+                time: localTime,
+                x: cur.x,
+                y: cur.y,
+                scale: cur.scale,
+                rotation: cur.rotation,
+                opacity: cur.opacity,
+                pivotX: cur.pivotX,
+                pivotY: cur.pivotY,
+                easing: defaultEasing,
+              };
+              list.push(created);
+              list.sort((a, b) => a.time - b.time);
+              return { ...c, keyframes: list };
+            });
+          };
+
+          return (
           <>
             {isVisual && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-200">Transform</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-slate-200">Transform</span>
+                    {sortedKeyframes.length > 0 && (
+                      <span className="text-[10px] font-mono-tabular text-sky-400">
+                        · {sortedKeyframes.length} KF
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() =>
                       onUpdateClip(selectedClip.id, (c) => ({
                         ...c,
                         transform: createDefaultTransform(),
+                        keyframes: [],
                       }))
                     }
                     className="text-[11px] text-slate-400 hover:text-amber-400 flex items-center gap-1 cursor-pointer"
@@ -317,72 +498,47 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
 
                 <SliderRow
                   label="Scale"
-                  value={Math.round(selectedClip.transform.scale * 100)}
+                  value={Math.round(evaluatedTf.scale * 100)}
                   min={10}
                   max={250}
                   unit="%"
-                  onChange={(val) =>
-                    onUpdateClip(selectedClip.id, (c) => ({
-                      ...c,
-                      transform: { ...c.transform, scale: val / 100 },
-                    }))
-                  }
+                  onChange={(val) => applyTransformPatch({ scale: val / 100 })}
                 />
 
                 <SliderRow
                   label="Opacity"
-                  value={Math.round(selectedClip.transform.opacity * 100)}
+                  value={Math.round(evaluatedTf.opacity * 100)}
                   min={0}
                   max={100}
                   unit="%"
-                  onChange={(val) =>
-                    onUpdateClip(selectedClip.id, (c) => ({
-                      ...c,
-                      transform: { ...c.transform, opacity: val / 100 },
-                    }))
-                  }
+                  onChange={(val) => applyTransformPatch({ opacity: val / 100 })}
                 />
 
                 <SliderRow
                   label="Rotation"
-                  value={Math.round(selectedClip.transform.rotation)}
-                  min={-180}
-                  max={180}
+                  value={Math.round(evaluatedTf.rotation)}
+                  min={-360}
+                  max={360}
                   unit="°"
-                  onChange={(val) =>
-                    onUpdateClip(selectedClip.id, (c) => ({
-                      ...c,
-                      transform: { ...c.transform, rotation: val },
-                    }))
-                  }
+                  onChange={(val) => applyTransformPatch({ rotation: val })}
                 />
 
                 <div className="grid grid-cols-2 gap-2">
                   <SliderRow
                     label="Pos X"
-                    value={Math.round(selectedClip.transform.x * 100)}
-                    min={-100}
-                    max={100}
+                    value={Math.round(evaluatedTf.x * 100)}
+                    min={-120}
+                    max={120}
                     unit="%"
-                    onChange={(val) =>
-                      onUpdateClip(selectedClip.id, (c) => ({
-                        ...c,
-                        transform: { ...c.transform, x: val / 100 },
-                      }))
-                    }
+                    onChange={(val) => applyTransformPatch({ x: val / 100 })}
                   />
                   <SliderRow
                     label="Pos Y"
-                    value={Math.round(selectedClip.transform.y * 100)}
-                    min={-100}
-                    max={100}
+                    value={Math.round(evaluatedTf.y * 100)}
+                    min={-120}
+                    max={120}
                     unit="%"
-                    onChange={(val) =>
-                      onUpdateClip(selectedClip.id, (c) => ({
-                        ...c,
-                        transform: { ...c.transform, y: val / 100 },
-                      }))
-                    }
+                    onChange={(val) => applyTransformPatch({ y: val / 100 })}
                   />
                 </div>
 
@@ -421,6 +577,195 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                     <FlipVertical className="w-3.5 h-3.5" />
                     Flip V
                   </button>
+                </div>
+
+                {/* Pivot Point (Anchor) Section */}
+                <div className="pt-3 border-t border-white/8 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Crosshair className="w-3.5 h-3.5 text-sky-400" />
+                      <span className="text-xs font-semibold text-slate-200">Pivot Point (Anchor)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => applyTransformPatch({ pivotX: 0, pivotY: 0 })}
+                      className="text-[11px] text-slate-400 hover:text-sky-400 cursor-pointer"
+                    >
+                      Center
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="grid grid-cols-3 gap-1 p-1.5 rounded bg-[#0B0D11] border border-white/10 shrink-0"
+                      aria-label="Pivot anchor presets"
+                    >
+                      {PIVOT_GRID_PRESETS.map((pt) => {
+                        const isMatch =
+                          Math.abs(evaluatedTf.pivotX - pt.px) < 0.08 &&
+                          Math.abs(evaluatedTf.pivotY - pt.py) < 0.08;
+                        return (
+                          <button
+                            key={pt.label}
+                            type="button"
+                            title={`Pivot: ${pt.label}`}
+                            onClick={() => applyTransformPatch({ pivotX: pt.px, pivotY: pt.py })}
+                            className={`w-5 h-5 rounded-sm flex items-center justify-center cursor-pointer transition-colors ${
+                              isMatch
+                                ? 'bg-sky-500 text-[#0B0D11]'
+                                : 'bg-[#181C26] hover:bg-white/15 text-slate-400'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isMatch ? 'bg-[#0B0D11]' : 'bg-slate-400'
+                              }`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <SliderRow
+                        label="Pivot X"
+                        value={Math.round(evaluatedTf.pivotX * 100)}
+                        min={-150}
+                        max={150}
+                        unit="%"
+                        onChange={(val) => applyTransformPatch({ pivotX: val / 100 })}
+                      />
+                      <SliderRow
+                        label="Pivot Y"
+                        value={Math.round(evaluatedTf.pivotY * 100)}
+                        min={-150}
+                        max={150}
+                        unit="%"
+                        onChange={(val) => applyTransformPatch({ pivotY: val / 100 })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-snug">
+                    Rotation and scaling orbit around the cyan pivot crosshair. Drag the crosshair directly on the video frame.
+                  </p>
+                </div>
+
+                {/* Keyframe Animation Section */}
+                <div className="pt-3 border-t border-white/8 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Diamond className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="text-xs font-semibold text-slate-200">Keyframe Animation</span>
+                    </div>
+                    <span className="text-[10px] font-mono-tabular text-slate-400">
+                      @{localTime.toFixed(2)}s
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={!prevKf}
+                      onClick={() => prevKf && onSeek(selectedClip.startTime + prevKf.time)}
+                      title="Previous Keyframe"
+                      className="p-1.5 rounded bg-[#161A23] border border-white/10 text-slate-200 hover:bg-white/10 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleOrUpdateKeyframe}
+                      className={`flex-1 py-1.5 px-2.5 rounded text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        activeKf
+                          ? 'bg-sky-500/20 border border-sky-400/50 text-sky-300 hover:bg-rose-500/20 hover:border-rose-400/50 hover:text-rose-300'
+                          : 'bg-amber-500 hover:bg-amber-400 text-[#0B0D11]'
+                      }`}
+                    >
+                      <Diamond className="w-3.5 h-3.5" />
+                      <span>{activeKf ? 'Remove Keyframe' : 'Add Keyframe'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!nextKf}
+                      onClick={() => nextKf && onSeek(selectedClip.startTime + nextKf.time)}
+                      title="Next Keyframe"
+                      className="p-1.5 rounded bg-[#161A23] border border-white/10 text-slate-200 hover:bg-white/10 disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] text-slate-400 shrink-0">Curve Easing</label>
+                    <select
+                      value={activeKf ? activeKf.easing : defaultEasing}
+                      onChange={(e) => {
+                        const easing = e.target.value as KeyframeEasing;
+                        setDefaultEasing(easing);
+                        if (activeKf) {
+                          onUpdateClip(selectedClip.id, (c) => ({
+                            ...c,
+                            keyframes: (c.keyframes || []).map((k) =>
+                              k.id === activeKf.id ? { ...k, easing } : k
+                            ),
+                          }));
+                        }
+                      }}
+                      className="flex-1 px-2 py-1 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-200"
+                    >
+                      {EASING_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {sortedKeyframes.length > 0 && (
+                    <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                      {sortedKeyframes.map((kf) => {
+                        const isCur = Math.abs(kf.time - localTime) <= 0.08;
+                        return (
+                          <div
+                            key={kf.id}
+                            className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded border text-[11px] ${
+                              isCur
+                                ? 'bg-sky-500/15 border-sky-400/50 text-sky-200'
+                                : 'bg-[#0B0D11] border-white/8 text-slate-300'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => onSeek(selectedClip.startTime + kf.time)}
+                              className="flex-1 text-left font-mono-tabular truncate cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Diamond className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                              <span>{kf.time.toFixed(2)}s</span>
+                              <span className="text-slate-500">·</span>
+                              <span>{Math.round(kf.scale * 100)}%</span>
+                              <span className="text-slate-500">·</span>
+                              <span>{Math.round(kf.rotation)}°</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onUpdateClip(selectedClip.id, (c) => ({
+                                  ...c,
+                                  keyframes: (c.keyframes || []).filter((k) => k.id !== kf.id),
+                                }))
+                              }
+                              title="Delete Keyframe"
+                              className="p-0.5 text-slate-500 hover:text-rose-400 cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Animations */}
@@ -620,7 +965,8 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               </div>
             )}
           </>
-        )}
+          );
+        })()}
 
         {activeTab === 'text' && selectedClip.text && (
           <div className="space-y-3">
@@ -639,23 +985,190 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               />
             </div>
 
+            {/* Microsoft Word + Custom Font Family Browser */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-slate-400">
+                  Font Family ({allFonts.length} available)
+                </label>
+                {onImportFonts && (
+                  <>
+                    <input
+                      ref={fontInputRef}
+                      type="file"
+                      multiple
+                      accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          onImportFonts(e.target.files);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fontInputRef.current?.click()}
+                      className="text-[11px] font-medium text-amber-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>Import Font</span>
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFontPickerOpen((v) => !v)}
+                className="w-full px-2.5 py-2 rounded bg-[#0B0D11] border border-white/12 hover:border-amber-500/60 text-left flex items-center justify-between gap-2 cursor-pointer"
+              >
+                <span
+                  className="text-sm text-white truncate"
+                  style={{ fontFamily: buildCanvasFontCss(selectedClip.text.fontFamily) }}
+                >
+                  {selectedClip.text.fontFamily}
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${
+                    fontPickerOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {fontPickerOpen && (
+                <div className="rounded-md bg-[#0B0D11] border border-white/12 p-2 space-y-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={fontSearch}
+                      onChange={(e) => setFontSearch(e.target.value)}
+                      placeholder="Search Calibri, Aptos, Times New Roman..."
+                      className="w-full pl-7 pr-2 py-1 rounded bg-[#161A23] border border-white/10 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-1">
+                    {FONT_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setFontCategory(cat)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium cursor-pointer whitespace-nowrap ${
+                          fontCategory === cat
+                            ? 'bg-amber-500 text-[#0B0D11]'
+                            : 'bg-[#161A23] text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {cat === 'MS Word Sans'
+                          ? 'Word Sans'
+                          : cat === 'MS Word Serif'
+                            ? 'Word Serif'
+                            : cat === 'Display & Script'
+                              ? 'Script'
+                              : cat === 'MS Word Mono'
+                                ? 'Word Mono'
+                                : cat === 'Custom'
+                                  ? `My Fonts (${customFonts.length})`
+                                  : cat}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto divide-y divide-white/[0.04] pr-0.5">
+                    {filteredFonts.length === 0 ? (
+                      <div className="py-4 text-center space-y-1.5">
+                        <p className="text-[11px] text-slate-400">
+                          {fontCategory === 'Custom'
+                            ? 'No custom fonts imported yet.'
+                            : 'No matching fonts found.'}
+                        </p>
+                        {fontCategory === 'Custom' && onImportFonts && (
+                          <button
+                            type="button"
+                            onClick={() => fontInputRef.current?.click()}
+                            className="px-2.5 py-1 rounded bg-amber-500 text-[#0B0D11] text-[11px] font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Upload .ttf / .otf / .woff</span>
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      filteredFonts.map((f) => {
+                        const selected =
+                          selectedClip.text?.fontFamily.toLowerCase() === f.family.toLowerCase();
+                        return (
+                          <div
+                            key={`${f.category}_${f.family}_${f.customId || ''}`}
+                            className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded cursor-pointer ${
+                              selected ? 'bg-amber-500/15 text-amber-300' : 'hover:bg-white/[0.04]'
+                            }`}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateClip(selectedClip.id, (c) => ({
+                                  ...c,
+                                  text: c.text ? { ...c.text, fontFamily: f.family } : undefined,
+                                }));
+                                setFontPickerOpen(false);
+                              }}
+                              className="flex-1 min-w-0 text-left flex items-center justify-between gap-2 cursor-pointer"
+                            >
+                              <span
+                                className="text-xs text-slate-100 truncate"
+                                style={{ fontFamily: buildCanvasFontCss(f.family) }}
+                              >
+                                {f.label}
+                              </span>
+                              <span className="text-[9px] text-slate-500 shrink-0">
+                                {f.isCustom ? 'Imported' : f.category.replace('MS Word ', '')}
+                              </span>
+                            </button>
+                            {f.isCustom && f.customId && onDeleteCustomFont && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteCustomFont(f.customId!);
+                                }}
+                                title="Delete imported font"
+                                className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">Font Family</label>
+                <label className="text-[11px] text-slate-400 block mb-1">Weight</label>
                 <select
-                  value={selectedClip.text.fontFamily}
+                  value={selectedClip.text.fontWeight}
                   onChange={(e) =>
                     onUpdateClip(selectedClip.id, (c) => ({
                       ...c,
-                      text: c.text ? { ...c.text, fontFamily: e.target.value } : undefined,
+                      text: c.text
+                        ? { ...c.text, fontWeight: parseInt(e.target.value, 10) }
+                        : undefined,
                     }))
                   }
                   className="w-full px-2 py-1.5 rounded bg-[#0B0D11] border border-white/10 text-xs text-slate-200"
                 >
-                  <option value="Outfit">Outfit</option>
-                  <option value="Plus Jakarta Sans">Plus Jakarta Sans</option>
-                  <option value="JetBrains Mono">JetBrains Mono</option>
-                  <option value="Georgia">Georgia Serif</option>
+                  <option value={300}>Light (300)</option>
+                  <option value={400}>Regular (400)</option>
+                  <option value={600}>SemiBold (600)</option>
+                  <option value={700}>Bold (700)</option>
+                  <option value={800}>Heavy (800)</option>
                 </select>
               </div>
               <div>
@@ -689,6 +1202,21 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 onUpdateClip(selectedClip.id, (c) => ({
                   ...c,
                   text: c.text ? { ...c.text, fontSize: val } : undefined,
+                }))
+              }
+            />
+
+            <SliderRow
+              label="Letter Spacing"
+              value={selectedClip.text.letterSpacing}
+              min={-4}
+              max={24}
+              step={0.5}
+              unit="px"
+              onChange={(val) =>
+                onUpdateClip(selectedClip.id, (c) => ({
+                  ...c,
+                  text: c.text ? { ...c.text, letterSpacing: val } : undefined,
                 }))
               }
             />

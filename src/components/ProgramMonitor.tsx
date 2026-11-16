@@ -16,7 +16,9 @@ import {
 import { MediaAsset, ProjectState, TimelineClip } from '../types/studio';
 import {
   MediaElementCache,
+  evaluateClipTransform,
   getOrCreateVideo,
+  measureClipLocalBounds,
   renderCompositionFrame,
 } from '../utils/canvasRenderer';
 import { ASPECT_RATIO_DIMENSIONS, formatTimecode } from '../utils/defaults';
@@ -42,6 +44,7 @@ interface ProgramMonitorProps {
   onToggleMute: () => void;
   onChangeVolume: (vol: number) => void;
   onUpdateClipTransform: (clipId: string, x: number, y: number) => void;
+  onUpdateClipPivot?: (clipId: string, pivotX: number, pivotY: number) => void;
   onSelectClip: (clipId: string) => void;
 }
 
@@ -66,6 +69,7 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
   onToggleMute,
   onChangeVolume,
   onUpdateClipTransform,
+  onUpdateClipPivot,
   onSelectClip,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,10 +77,13 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
   const [showGuides, setShowGuides] = useState(false);
   const dragStateRef = useRef<{
     clipId: string;
+    mode: 'position' | 'pivot';
     startClientX: number;
     startClientY: number;
     origX: number;
     origY: number;
+    boundsW: number;
+    boundsH: number;
   } | null>(null);
 
   const dims = ASPECT_RATIO_DIMENSIONS[project.aspectRatio];
@@ -185,6 +192,8 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
+    const canvasPxX = ((e.clientX - rect.left) / rect.width) * dims.width;
+    const canvasPxY = ((e.clientY - rect.top) / rect.height) * dims.height;
     const normX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const normY = ((e.clientY - rect.top) / rect.height) * 2 - 1;
 
@@ -194,6 +203,59 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
         Math.max(-1, Math.min(1, Number(normY.toFixed(3))))
       );
       return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (
+      ctx &&
+      onUpdateClipPivot &&
+      selectedClip &&
+      selectedClip.kind !== 'audio' &&
+      playheadTime >= selectedClip.startTime &&
+      playheadTime < selectedClip.startTime + selectedClip.duration
+    ) {
+      const selTrack = project.tracks.find((t) => t.id === selectedClip.trackId);
+      if (selTrack && !selTrack.hidden && !selTrack.locked) {
+        const isMain = selTrack.type === 'video';
+        const localT = Math.max(0, playheadTime - selectedClip.startTime);
+        const tf = evaluateClipTransform(selectedClip, localT);
+        const showPivotHandle =
+          !isMain ||
+          Math.abs(tf.pivotX) > 0.005 ||
+          Math.abs(tf.pivotY) > 0.005 ||
+          (selectedClip.keyframes?.length ?? 0) > 0;
+        if (showPivotHandle) {
+          const asset = selectedClip.assetId ? assetsMap.get(selectedClip.assetId) : undefined;
+          const bounds = measureClipLocalBounds(
+            ctx,
+            selectedClip,
+            asset,
+            dims.width,
+            dims.height,
+            mediaCache,
+            isMain
+          );
+          const anchorX =
+            dims.width / 2 + tf.x * (dims.width / 2) + tf.pivotX * (bounds.w * 0.5);
+          const anchorY =
+            dims.height / 2 + tf.y * (dims.height / 2) + tf.pivotY * (bounds.h * 0.5);
+          const hitRadiusCanvas = 22 * (dims.width / Math.max(1, rect.width));
+          if (Math.hypot(canvasPxX - anchorX, canvasPxY - anchorY) <= hitRadiusCanvas) {
+            dragStateRef.current = {
+              clipId: selectedClip.id,
+              mode: 'pivot',
+              startClientX: e.clientX,
+              startClientY: e.clientY,
+              origX: tf.pivotX,
+              origY: tf.pivotY,
+              boundsW: Math.max(40, bounds.w),
+              boundsH: Math.max(40, bounds.h),
+            };
+            e.currentTarget.setPointerCapture(e.pointerId);
+            return;
+          }
+        }
+      }
     }
 
     const activeNonMain = project.clips
@@ -216,22 +278,26 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
 
     if (!targetClip) {
       targetClip =
-        activeNonMain.find(
-          (c) =>
-            Math.abs(normX - c.transform.x) < 0.35 && Math.abs(normY - c.transform.y) < 0.28
-        ) ||
+        activeNonMain.find((c) => {
+          const tf = evaluateClipTransform(c, Math.max(0, playheadTime - c.startTime));
+          return Math.abs(normX - tf.x) < 0.35 && Math.abs(normY - tf.y) < 0.28;
+        }) ||
         activeNonMain[0] ||
         null;
     }
 
     if (!targetClip) return;
     onSelectClip(targetClip.id);
+    const tf = evaluateClipTransform(targetClip, Math.max(0, playheadTime - targetClip.startTime));
     dragStateRef.current = {
       clipId: targetClip.id,
+      mode: 'position',
       startClientX: e.clientX,
       startClientY: e.clientY,
-      origX: targetClip.transform.x,
-      origY: targetClip.transform.y,
+      origX: tf.x,
+      origY: tf.y,
+      boundsW: dims.width,
+      boundsH: dims.height,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -241,6 +307,20 @@ export const ProgramMonitor: React.FC<ProgramMonitorProps> = ({
     const canvas = canvasRef.current;
     if (!drag || !canvas) return;
     const rect = canvas.getBoundingClientRect();
+
+    if (drag.mode === 'pivot' && onUpdateClipPivot) {
+      const dxPx = ((e.clientX - drag.startClientX) / rect.width) * dims.width;
+      const dyPx = ((e.clientY - drag.startClientY) / rect.height) * dims.height;
+      const dPivX = dxPx / (drag.boundsW * 0.5);
+      const dPivY = dyPx / (drag.boundsH * 0.5);
+      let nextPivX = Math.max(-1.5, Math.min(1.5, Number((drag.origX + dPivX).toFixed(3))));
+      let nextPivY = Math.max(-1.5, Math.min(1.5, Number((drag.origY + dPivY).toFixed(3))));
+      if (Math.abs(nextPivX) < 0.04) nextPivX = 0;
+      if (Math.abs(nextPivY) < 0.04) nextPivY = 0;
+      onUpdateClipPivot(drag.clipId, nextPivX, nextPivY);
+      return;
+    }
+
     const dx = ((e.clientX - drag.startClientX) / rect.width) * 2;
     const dy = ((e.clientY - drag.startClientY) / rect.height) * 2;
     const nextX = Math.max(-1.2, Math.min(1.2, Number((drag.origX + dx).toFixed(3))));

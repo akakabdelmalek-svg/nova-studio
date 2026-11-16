@@ -463,6 +463,36 @@ export const Timeline: React.FC<TimelineProps> = ({
                             </div>
                           </div>
 
+                          {/* Keyframe Diamonds */}
+                          {clip.keyframes && clip.keyframes.length > 0 && (
+                            <div className="absolute inset-x-0 bottom-1 h-3 pointer-events-none z-20">
+                              {clip.keyframes.map((kf) => {
+                                const kx = kf.time * zoomPxPerSec;
+                                const isAtPlayhead =
+                                  Math.abs(playheadTime - (clip.startTime + kf.time)) < 0.08;
+                                return (
+                                  <button
+                                    key={kf.id}
+                                    type="button"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onSelectClip(clip.id);
+                                      onSeek(clip.startTime + kf.time);
+                                    }}
+                                    title={`Keyframe @ ${kf.time.toFixed(2)}s`}
+                                    style={{ left: `${kx}px` }}
+                                    className={`pointer-events-auto absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rotate-45 border cursor-pointer transition-transform hover:scale-125 ${
+                                      isAtPlayhead
+                                        ? 'bg-sky-400 border-white scale-110'
+                                        : 'bg-amber-400 border-[#0B0D11]'
+                                    }`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          )}
+
                           {/* Left & Right Trim Handles */}
                           <div
                             onPointerDown={(e) => startDragClip(e, clip, 'trim-left')}

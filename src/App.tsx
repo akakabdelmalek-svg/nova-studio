@@ -12,6 +12,7 @@ import { TopBar } from './components/TopBar';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import {
   AspectRatio,
+  CustomFontRecord,
   ExportedVideoRecord,
   FilterPresetId,
   MediaAsset,
@@ -29,7 +30,7 @@ import {
   runAISubtitlesFromClip,
 } from './utils/aiTools';
 import { audioEngine } from './utils/audioEngine';
-import { createMediaCache } from './utils/canvasRenderer';
+import { createMediaCache, evaluateClipTransform } from './utils/canvasRenderer';
 import {
   FILTER_PRESETS,
   createDefaultChromaKey,
@@ -37,15 +38,19 @@ import {
   createDefaultTransform,
   uid,
 } from './utils/defaults';
+import { loadCustomFontFace, readFontFileToRecord } from './utils/fonts';
 import { getBuiltInAssets, loadLocalMediaFile } from './utils/mediaLoader';
 import {
   createBlankProject,
   createStarterProject,
+  deleteCustomFontFromDB,
   deleteExportedVideoFromDB,
   deleteProjectFromDB,
+  listCustomFontsFromDB,
   listExportedVideosFromDB,
   listProjectsFromDB,
   loadAllMediaBlobsFromDB,
+  saveCustomFontToDB,
   saveExportedVideoToDB,
   saveMediaBlobToDB,
   saveProjectToDB,
@@ -54,6 +59,7 @@ import {
 export default function App() {
   const [activeView, setActiveView] = useState<'home' | 'editor'>('home');
   const [assets, setAssets] = useState<MediaAsset[]>(() => getBuiltInAssets());
+  const [customFonts, setCustomFonts] = useState<CustomFontRecord[]>([]);
   const [project, setProject] = useState<ProjectState>(() => createStarterProject());
   const [savedProjects, setSavedProjects] = useState<ProjectState[]>([]);
   const [exportedVideos, setExportedVideos] = useState<ExportedVideoRecord[]>([]);
@@ -114,12 +120,18 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [blobs, projs, exportsList] = await Promise.all([
+        const [blobs, projs, exportsList, storedFonts] = await Promise.all([
           loadAllMediaBlobsFromDB(),
           listProjectsFromDB(),
           listExportedVideosFromDB(),
+          listCustomFontsFromDB(),
         ]);
         if (!active) return;
+
+        if (storedFonts.length > 0) {
+          await Promise.all(storedFonts.map((f) => loadCustomFontFace(f)));
+          if (active) setCustomFonts(storedFonts);
+        }
 
         if (exportsList.length > 0) {
           setExportedVideos(exportsList);
@@ -331,6 +343,48 @@ export default function App() {
     if (imported.length > 0) {
       setAssets((prev) => [...imported, ...prev]);
     }
+  }, []);
+
+  const handleImportFonts = useCallback(
+    async (files: FileList) => {
+      const existing = customFonts.map((f) => f.family);
+      const added: CustomFontRecord[] = [];
+      for (const file of Array.from(files)) {
+        try {
+          const rec = await readFontFileToRecord(file, [
+            ...existing,
+            ...added.map((a) => a.family),
+          ]);
+          await saveCustomFontToDB(rec).catch(() => {});
+          added.push(rec);
+        } catch (err) {
+          setAiStatusMessage({
+            type: 'error',
+            text: err instanceof Error ? err.message : `Could not import font ${file.name}.`,
+          });
+        }
+      }
+      if (added.length > 0) {
+        setCustomFonts((prev) => [...added, ...prev]);
+        // Automatically apply newly imported font if a text clip is currently selected
+        if (selectedClip && selectedClip.kind === 'text') {
+          commitProjectChange((prev) => ({
+            ...prev,
+            clips: prev.clips.map((c) =>
+              c.id === selectedClip.id && c.text
+                ? { ...c, text: { ...c.text, fontFamily: added[0].family } }
+                : c
+            ),
+          }));
+        }
+      }
+    },
+    [customFonts, selectedClip, commitProjectChange]
+  );
+
+  const handleDeleteCustomFont = useCallback(async (fontId: string) => {
+    await deleteCustomFontFromDB(fontId).catch(() => {});
+    setCustomFonts((prev) => prev.filter((f) => f.id !== fontId));
   }, []);
 
   const handleImportRecordedAudio = useCallback(
@@ -556,6 +610,9 @@ export default function App() {
       const leftPart: TimelineClip = {
         ...clip,
         duration: firstDur,
+        keyframes: clip.keyframes
+          ? clip.keyframes.filter((k) => k.time <= firstDur + 0.001).map((k) => ({ ...k }))
+          : undefined,
       };
       const rightPart: TimelineClip = {
         ...clip,
@@ -563,6 +620,11 @@ export default function App() {
         startTime: Number(playheadTime.toFixed(3)),
         duration: secondDur,
         sourceOffset: Number((clip.sourceOffset + firstDur * clip.speed).toFixed(3)),
+        keyframes: clip.keyframes
+          ? clip.keyframes
+              .filter((k) => k.time >= firstDur - 0.001)
+              .map((k) => ({ ...k, id: uid('kf'), time: Math.max(0, Number((k.time - firstDur).toFixed(3))) }))
+          : undefined,
         transitionIn: { type: 'none', duration: 0.5 },
       };
 
@@ -586,6 +648,7 @@ export default function App() {
         name: `${clip.name} Copy`,
         startTime: Number((clip.startTime + clip.duration).toFixed(2)),
         transform: { ...clip.transform },
+        keyframes: clip.keyframes ? clip.keyframes.map((k) => ({ ...k, id: uid('kf') })) : undefined,
         color: { ...clip.color },
         chromaKey: { ...clip.chromaKey },
         text: clip.text ? { ...clip.text } : undefined,
@@ -1214,6 +1277,8 @@ export default function App() {
           onApplyFilter={handleApplyFilter}
           onToggleEffect={handleToggleEffect}
           onApplyTransition={handleApplyTransition}
+          customFonts={customFonts}
+          onImportFonts={handleImportFonts}
         />
 
         <ProgramMonitor
@@ -1242,7 +1307,72 @@ export default function App() {
           onUpdateClipTransform={(clipId, x, y) =>
             handleUpdateClip(
               clipId,
-              (c) => ({ ...c, transform: { ...c.transform, x, y } }),
+              (c) => {
+                const localT = Number(
+                  Math.max(0, Math.min(c.duration, playheadTime - c.startTime)).toFixed(3)
+                );
+                const list = [...(c.keyframes || [])];
+                if (list.length > 0) {
+                  const idx = list.findIndex((k) => Math.abs(k.time - localT) <= 0.08);
+                  if (idx >= 0) {
+                    list[idx] = { ...list[idx], x, y };
+                  } else {
+                    const cur = evaluateClipTransform(c, localT);
+                    list.push({
+                      id: uid('kf'),
+                      time: localT,
+                      x,
+                      y,
+                      scale: cur.scale,
+                      rotation: cur.rotation,
+                      opacity: cur.opacity,
+                      pivotX: cur.pivotX,
+                      pivotY: cur.pivotY,
+                      easing: 'easeInOut',
+                    });
+                    list.sort((a, b) => a.time - b.time);
+                  }
+                }
+                return { ...c, transform: { ...c.transform, x, y }, keyframes: list.length ? list : c.keyframes };
+              },
+              false
+            )
+          }
+          onUpdateClipPivot={(clipId, pivotX, pivotY) =>
+            handleUpdateClip(
+              clipId,
+              (c) => {
+                const localT = Number(
+                  Math.max(0, Math.min(c.duration, playheadTime - c.startTime)).toFixed(3)
+                );
+                const list = [...(c.keyframes || [])];
+                if (list.length > 0) {
+                  const idx = list.findIndex((k) => Math.abs(k.time - localT) <= 0.08);
+                  if (idx >= 0) {
+                    list[idx] = { ...list[idx], pivotX, pivotY };
+                  } else {
+                    const cur = evaluateClipTransform(c, localT);
+                    list.push({
+                      id: uid('kf'),
+                      time: localT,
+                      x: cur.x,
+                      y: cur.y,
+                      scale: cur.scale,
+                      rotation: cur.rotation,
+                      opacity: cur.opacity,
+                      pivotX,
+                      pivotY,
+                      easing: 'easeInOut',
+                    });
+                    list.sort((a, b) => a.time - b.time);
+                  }
+                }
+                return {
+                  ...c,
+                  transform: { ...c.transform, pivotX, pivotY },
+                  keyframes: list.length ? list : c.keyframes,
+                };
+              },
               false
             )
           }
@@ -1257,9 +1387,14 @@ export default function App() {
           project={project}
           selectedClip={selectedClip}
           isMainTrackClip={isMainTrackClip}
+          playheadTime={playheadTime}
           aiBusyTask={aiBusyTask}
           aiStatusMessage={aiStatusMessage}
           isPickingTrackTarget={Boolean(pickingTrackClipId)}
+          customFonts={customFonts}
+          onSeek={handleSeek}
+          onImportFonts={handleImportFonts}
+          onDeleteCustomFont={(id) => void handleDeleteCustomFont(id)}
           onUpdateProject={(patch) => commitProjectChange((p) => ({ ...p, ...patch }))}
           onUpdateClip={handleUpdateClip}
           onSplitClip={(id) => handleSplitClip(id)}
@@ -1421,6 +1556,8 @@ export default function App() {
               onApplyFilter={handleApplyFilter}
               onToggleEffect={handleToggleEffect}
               onApplyTransition={handleApplyTransition}
+              customFonts={customFonts}
+              onImportFonts={handleImportFonts}
             />
           ) : (
             <InspectorPanel
@@ -1429,9 +1566,14 @@ export default function App() {
               project={project}
               selectedClip={selectedClip}
               isMainTrackClip={isMainTrackClip}
+              playheadTime={playheadTime}
               aiBusyTask={aiBusyTask}
               aiStatusMessage={aiStatusMessage}
               isPickingTrackTarget={Boolean(pickingTrackClipId)}
+              customFonts={customFonts}
+              onSeek={handleSeek}
+              onImportFonts={handleImportFonts}
+              onDeleteCustomFont={(id) => void handleDeleteCustomFont(id)}
               onUpdateProject={(patch) => commitProjectChange((p) => ({ ...p, ...patch }))}
               onUpdateClip={handleUpdateClip}
               onSplitClip={(id) => handleSplitClip(id)}

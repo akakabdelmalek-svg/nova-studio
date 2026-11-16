@@ -46,6 +46,8 @@ export function createDefaultTransform(): ClipTransform {
     opacity: 1,
     flipH: false,
     flipV: false,
+    pivotX: 0,
+    pivotY: 0,
   };
 }
 

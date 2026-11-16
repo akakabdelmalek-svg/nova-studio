@@ -4,12 +4,17 @@ import {
   ChromaKeySettings,
   ClipColor,
   ClipEffect,
+  ClipTransform,
+  KeyframeEasing,
   MediaAsset,
   MotionTrackSettings,
   ProjectState,
   TimelineClip,
+  TransitionType,
+  VideoEffectType,
 } from '../types/studio';
 import { EFFECT_SPEC_MAP, EffectSpec } from './effectsCatalog';
+import { buildCanvasFontCss } from './fonts';
 import { TRANSITION_SPEC_MAP, TransitionSpec } from './transitionsCatalog';
 
 export interface MediaElementCache {
@@ -21,6 +26,8 @@ export interface MediaElementCache {
   fxCanvasA?: HTMLCanvasElement;
   fxCanvasB?: HTMLCanvasElement;
   transCanvas?: HTMLCanvasElement;
+  previewSceneA?: HTMLCanvasElement;
+  previewSceneB?: HTMLCanvasElement;
 }
 
 export function createMediaCache(): MediaElementCache {
@@ -1348,6 +1355,289 @@ function applyPostClipEffects(
   }
 }
 
+function applyKeyframeEasing(t: number, easing: KeyframeEasing): number {
+  const c = Math.max(0, Math.min(1, t));
+  switch (easing) {
+    case 'easeIn':
+      return c * c;
+    case 'easeOut':
+      return 1 - (1 - c) * (1 - c);
+    case 'easeInOut':
+      return c * c * (3 - 2 * c);
+    case 'linear':
+    default:
+      return c;
+  }
+}
+
+export interface EvaluatedTransform extends ClipTransform {
+  pivotX: number;
+  pivotY: number;
+}
+
+export function evaluateClipTransform(clip: TimelineClip, localTime: number): EvaluatedTransform {
+  const basePivotX = clip.transform.pivotX ?? 0;
+  const basePivotY = clip.transform.pivotY ?? 0;
+  const kfs = clip.keyframes;
+  if (!kfs || kfs.length === 0) {
+    return {
+      ...clip.transform,
+      pivotX: basePivotX,
+      pivotY: basePivotY,
+    };
+  }
+
+  const sorted = kfs.length === 1 ? kfs : [...kfs].sort((a, b) => a.time - b.time);
+  if (localTime <= sorted[0].time || sorted.length === 1) {
+    const k0 = sorted[0];
+    return {
+      ...clip.transform,
+      x: k0.x,
+      y: k0.y,
+      scale: k0.scale,
+      rotation: k0.rotation,
+      opacity: k0.opacity,
+      pivotX: k0.pivotX,
+      pivotY: k0.pivotY,
+    };
+  }
+  const last = sorted[sorted.length - 1];
+  if (localTime >= last.time) {
+    return {
+      ...clip.transform,
+      x: last.x,
+      y: last.y,
+      scale: last.scale,
+      rotation: last.rotation,
+      opacity: last.opacity,
+      pivotX: last.pivotX,
+      pivotY: last.pivotY,
+    };
+  }
+
+  let kfA = sorted[0];
+  let kfB = last;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (localTime >= sorted[i].time && localTime <= sorted[i + 1].time) {
+      kfA = sorted[i];
+      kfB = sorted[i + 1];
+      break;
+    }
+  }
+
+  const span = Math.max(0.0001, kfB.time - kfA.time);
+  const rawT = (localTime - kfA.time) / span;
+  const t = applyKeyframeEasing(rawT, kfA.easing || 'easeInOut');
+  const lerp = (a: number, b: number) => a + (b - a) * t;
+
+  return {
+    ...clip.transform,
+    x: lerp(kfA.x, kfB.x),
+    y: lerp(kfA.y, kfB.y),
+    scale: lerp(kfA.scale, kfB.scale),
+    rotation: lerp(kfA.rotation, kfB.rotation),
+    opacity: lerp(kfA.opacity, kfB.opacity),
+    pivotX: lerp(kfA.pivotX, kfB.pivotX),
+    pivotY: lerp(kfA.pivotY, kfB.pivotY),
+  };
+}
+
+function measureTextLocalBounds(
+  ctx: CanvasRenderingContext2D,
+  clip: TimelineClip,
+  width: number
+): { w: number; h: number } {
+  const t = clip.text!;
+  const scaleFactor = width / 1280;
+  const fontSize = Math.max(12, Math.round(t.fontSize * scaleFactor));
+  ctx.save();
+  ctx.font = `${t.fontWeight} ${fontSize}px ${buildCanvasFontCss(t.fontFamily)}`;
+  if ('letterSpacing' in ctx) {
+    (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${(t.letterSpacing * scaleFactor).toFixed(2)}px`;
+  }
+  const lines = (t.content || '').split('\n');
+  const lineHeight = fontSize * 1.24;
+  let maxW = 0;
+  for (const line of lines) {
+    const m = ctx.measureText(line || ' ');
+    if (m.width > maxW) maxW = m.width;
+  }
+  ctx.restore();
+  return {
+    w: Math.max(80 * scaleFactor, maxW + fontSize * 0.9),
+    h: Math.max(36 * scaleFactor, lines.length * lineHeight + fontSize * 0.5),
+  };
+}
+
+export function measureClipLocalBounds(
+  ctx: CanvasRenderingContext2D,
+  clip: TimelineClip,
+  asset: MediaAsset | undefined,
+  width: number,
+  height: number,
+  cache: MediaElementCache,
+  isMainTrack: boolean
+): { w: number; h: number } {
+  if (clip.kind === 'color') {
+    return { w: width, h: height };
+  }
+  if (clip.kind === 'text' && clip.text) {
+    return measureTextLocalBounds(ctx, clip, width);
+  }
+  if (clip.kind === 'sticker' && clip.sticker) {
+    const size = width * 0.16;
+    switch (clip.sticker.shape) {
+      case 'frame':
+        return { w: size * 2.4, h: size * 1.45 };
+      case 'rec':
+      case 'badge':
+        return { w: size * 1.25, h: size * 0.48 };
+      default:
+        return { w: size * 1.15, h: size * 1.15 };
+    }
+  }
+  if (clip.kind === 'image' && asset) {
+    if (asset.id === '__preview_scene_a__' || asset.id === '__preview_scene_b__') {
+      return { w: width, h: height };
+    }
+    const img = getOrCreateImage(cache, asset);
+    if (img) {
+      const targetScale = isMainTrack
+        ? Math.max(width / img.naturalWidth, height / img.naturalHeight)
+        : Math.min((width * 0.45) / img.naturalWidth, (height * 0.45) / img.naturalHeight);
+      return { w: img.naturalWidth * targetScale, h: img.naturalHeight * targetScale };
+    }
+  }
+  if (clip.kind === 'video' && asset) {
+    const vid = getOrCreateVideo(cache, asset);
+    if (vid && vid.readyState >= 2 && vid.videoWidth > 0) {
+      const targetScale = isMainTrack
+        ? Math.max(width / vid.videoWidth, height / vid.videoHeight)
+        : Math.min((width * 0.48) / vid.videoWidth, (height * 0.48) / vid.videoHeight);
+      return { w: vid.videoWidth * targetScale, h: vid.videoHeight * targetScale };
+    }
+  }
+  return { w: Math.max(120, width * 0.28), h: Math.max(54, height * 0.16) };
+}
+
+function getPreviewSceneCanvas(
+  cache: MediaElementCache,
+  kind: 'a' | 'b',
+  width: number,
+  height: number
+): HTMLCanvasElement {
+  const slot = kind === 'a' ? 'previewSceneA' : 'previewSceneB';
+  const existing = cache[slot];
+  if (existing && existing.width === width && existing.height === height) {
+    return existing;
+  }
+  const canvas = existing || document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  cache[slot] = canvas;
+  const ctx = canvas.getContext('2d')!;
+
+  if (kind === 'a') {
+    const sky = ctx.createLinearGradient(0, 0, 0, height);
+    sky.addColorStop(0, '#0f172a');
+    sky.addColorStop(0.55, '#c2410c');
+    sky.addColorStop(1, '#451a03');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, width, height);
+
+    // Warm sun orb
+    const sunGrad = ctx.createRadialGradient(width * 0.34, height * 0.38, 2, width * 0.34, height * 0.38, width * 0.28);
+    sunGrad.addColorStop(0, '#fef08a');
+    sunGrad.addColorStop(0.4, 'rgba(245,158,11,0.75)');
+    sunGrad.addColorStop(1, 'rgba(245,158,11,0)');
+    ctx.fillStyle = sunGrad;
+    ctx.beginPath();
+    ctx.arc(width * 0.34, height * 0.38, width * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mountain silhouettes
+    ctx.fillStyle = '#1e1b4b';
+    ctx.beginPath();
+    ctx.moveTo(0, height * 0.72);
+    ctx.lineTo(width * 0.24, height * 0.45);
+    ctx.lineTo(width * 0.52, height * 0.68);
+    ctx.lineTo(width * 0.78, height * 0.38);
+    ctx.lineTo(width, height * 0.64);
+    ctx.lineTo(width, height);
+    ctx.lineTo(0, height);
+    ctx.closePath();
+    ctx.fill();
+
+    // Crisp foreground Horizon card + accent ring
+    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = Math.max(1.5, width * 0.012);
+    ctx.beginPath();
+    ctx.arc(width * 0.66, height * 0.44, Math.min(width, height) * 0.16, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.font = `700 ${Math.max(11, Math.round(height * 0.19))}px "Outfit", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SCENE A', width * 0.5, height * 0.8);
+  } else {
+    const bg = ctx.createLinearGradient(0, 0, width, height);
+    bg.addColorStop(0, '#042f2e');
+    bg.addColorStop(0.5, '#0369a1');
+    bg.addColorStop(1, '#312e81');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // Horizon grid lines for clear spatial warp/transition feedback
+    ctx.strokeStyle = 'rgba(125, 211, 252, 0.25)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= width; x += Math.max(16, Math.round(width / 6))) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= height; y += Math.max(16, Math.round(height / 4))) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
+    // Cool neon orb
+    const orb = ctx.createRadialGradient(width * 0.68, height * 0.36, 2, width * 0.68, height * 0.36, width * 0.3);
+    orb.addColorStop(0, '#a5f3fc');
+    orb.addColorStop(0.45, 'rgba(56,189,248,0.65)');
+    orb.addColorStop(1, 'rgba(56,189,248,0)');
+    ctx.fillStyle = orb;
+    ctx.beginPath();
+    ctx.arc(width * 0.68, height * 0.36, width * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Diamond emblem
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = Math.max(1.5, width * 0.015);
+    const cx = width * 0.35;
+    const cy = height * 0.44;
+    const r = Math.min(width, height) * 0.19;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(240, 249, 255, 0.95)';
+    ctx.font = `700 ${Math.max(11, Math.round(height * 0.19))}px "Outfit", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('SCENE B', width * 0.5, height * 0.8);
+  }
+
+  return canvas;
+}
+
 function drawVisualClip(
   ctx: CanvasRenderingContext2D,
   clip: TimelineClip,
@@ -1368,10 +1658,11 @@ function drawVisualClip(
   extraBlurPx = 0
 ) {
   const anim = computeAnimState(clip, localTime, height);
+  const tf = evaluateClipTransform(clip, localTime);
   const tracked = evaluateMotionTrack(clip.motionTrack, timelineTime);
   if (tracked && !tracked.visible) return;
 
-  const totalAlpha = Math.max(0, Math.min(1, clip.transform.opacity * anim.alpha * extraAlpha));
+  const totalAlpha = Math.max(0, Math.min(1, tf.opacity * anim.alpha * extraAlpha));
   if (totalAlpha <= 0.002) return;
 
   // Motion-style clip effects (shake, zoom, twirl, dynamic)
@@ -1423,58 +1714,73 @@ function drawVisualClip(
       ? `${baseFilter === 'none' ? '' : baseFilter + ' '}blur(${extraBlurPx.toFixed(1)}px)`.trim()
       : baseFilter;
 
-  const posX = tracked ? tracked.x : clip.transform.x;
-  const posY = tracked ? tracked.y : clip.transform.y;
+  const posX = tracked ? tracked.x : tf.x;
+  const posY = tracked ? tracked.y : tf.y;
   const trackScale = tracked ? tracked.scale : 1;
+
+  const localBounds = measureClipLocalBounds(ctx, clip, asset, width, height, cache, isMainTrack);
+  const pivPxX = tf.pivotX * (localBounds.w * 0.5);
+  const pivPxY = tf.pivotY * (localBounds.h * 0.5);
 
   const cx = width / 2 + posX * (width / 2) + extraOffsetX + fxOffsetX;
   const cy = height / 2 + posY * (height / 2) + anim.offsetY + extraOffsetY + fxOffsetY;
-  ctx.translate(cx, cy);
-  ctx.rotate(((clip.transform.rotation + extraRotDeg + fxRot) * Math.PI) / 180);
+  ctx.translate(cx + pivPxX, cy + pivPxY);
+  ctx.rotate(((tf.rotation + extraRotDeg + fxRot) * Math.PI) / 180);
   const sx =
-    clip.transform.scale *
+    tf.scale *
     anim.scale *
     trackScale *
     extraScale *
     extraScaleX *
     fxScale *
-    (clip.transform.flipH ? -1 : 1);
+    (tf.flipH ? -1 : 1);
   const sy =
-    clip.transform.scale *
+    tf.scale *
     anim.scale *
     trackScale *
     extraScale *
     extraScaleY *
     fxScale *
-    (clip.transform.flipV ? -1 : 1);
+    (tf.flipV ? -1 : 1);
   ctx.scale(sx, sy);
+  ctx.translate(-pivPxX, -pivPxY);
 
   if (clip.kind === 'color') {
     const fill = asset?.color || '#111827';
     ctx.fillStyle = fill;
     ctx.fillRect(-width / 2, -height / 2, width, height);
   } else if (clip.kind === 'image' && asset) {
-    const img = getOrCreateImage(cache, asset);
-    if (img) {
-      const targetScale = isMainTrack
-        ? Math.max(width / img.naturalWidth, height / img.naturalHeight)
-        : Math.min((width * 0.45) / img.naturalWidth, (height * 0.45) / img.naturalHeight);
-      const dw = img.naturalWidth * targetScale;
-      const dh = img.naturalHeight * targetScale;
-      let drawable: HTMLImageElement | HTMLCanvasElement = img;
-      if (clip.aiMask?.enabled && clip.aiMask.polygon.length >= 3) {
-        drawable = applyAIMask(drawable, img.naturalWidth, img.naturalHeight, clip.aiMask, cache);
+    if (asset.id === '__preview_scene_a__' || asset.id === '__preview_scene_b__') {
+      const scCanvas = getPreviewSceneCanvas(
+        cache,
+        asset.id === '__preview_scene_a__' ? 'a' : 'b',
+        width,
+        height
+      );
+      ctx.drawImage(scCanvas, -width / 2, -height / 2, width, height);
+    } else {
+      const img = getOrCreateImage(cache, asset);
+      if (img) {
+        const targetScale = isMainTrack
+          ? Math.max(width / img.naturalWidth, height / img.naturalHeight)
+          : Math.min((width * 0.45) / img.naturalWidth, (height * 0.45) / img.naturalHeight);
+        const dw = img.naturalWidth * targetScale;
+        const dh = img.naturalHeight * targetScale;
+        let drawable: HTMLImageElement | HTMLCanvasElement = img;
+        if (clip.aiMask?.enabled && clip.aiMask.polygon.length >= 3) {
+          drawable = applyAIMask(drawable, img.naturalWidth, img.naturalHeight, clip.aiMask, cache);
+        }
+        if (clip.chromaKey.enabled) {
+          drawable = applyChromaKey(
+            drawable,
+            drawable instanceof HTMLCanvasElement ? drawable.width : img.naturalWidth,
+            drawable instanceof HTMLCanvasElement ? drawable.height : img.naturalHeight,
+            clip.chromaKey,
+            cache
+          );
+        }
+        ctx.drawImage(drawable, -dw / 2, -dh / 2, dw, dh);
       }
-      if (clip.chromaKey.enabled) {
-        drawable = applyChromaKey(
-          drawable,
-          drawable instanceof HTMLCanvasElement ? drawable.width : img.naturalWidth,
-          drawable instanceof HTMLCanvasElement ? drawable.height : img.naturalHeight,
-          clip.chromaKey,
-          cache
-        );
-      }
-      ctx.drawImage(drawable, -dw / 2, -dh / 2, dw, dh);
     }
   } else if (clip.kind === 'video' && asset) {
     const vid = getOrCreateVideo(cache, asset);
@@ -1537,7 +1843,10 @@ function drawText(ctx: CanvasRenderingContext2D, clip: TimelineClip, width: numb
   const t = clip.text!;
   const scaleFactor = width / 1280;
   const fontSize = Math.max(12, Math.round(t.fontSize * scaleFactor));
-  ctx.font = `${t.fontWeight} ${fontSize}px "${t.fontFamily}", sans-serif`;
+  ctx.font = `${t.fontWeight} ${fontSize}px ${buildCanvasFontCss(t.fontFamily)}`;
+  if ('letterSpacing' in ctx) {
+    (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = `${(t.letterSpacing * scaleFactor).toFixed(2)}px`;
+  }
   ctx.textAlign = t.align;
   ctx.textBaseline = 'middle';
 
@@ -3205,35 +3514,217 @@ export function renderCompositionFrame(
       playheadTime < sel.startTime + sel.duration
     ) {
       const track = project.tracks.find((t) => t.id === sel.trackId);
-      if (track && !track.hidden && track.type !== 'video') {
+      const localTime = Math.max(0, playheadTime - sel.startTime);
+      const tf = evaluateClipTransform(sel, localTime);
+      const hasCustomPivot = Math.abs(tf.pivotX) > 0.005 || Math.abs(tf.pivotY) > 0.005;
+      const hasKeyframes = (sel.keyframes?.length ?? 0) > 0;
+
+      if (track && !track.hidden) {
+        const isMain = track.type === 'video';
+        const asset = sel.assetId ? assetsMap.get(sel.assetId) : undefined;
         const tracked = evaluateMotionTrack(sel.motionTrack, playheadTime);
-        const px = tracked ? tracked.x : sel.transform.x;
-        const py = tracked ? tracked.y : sel.transform.y;
-        const sc = tracked ? sel.transform.scale * tracked.scale : sel.transform.scale;
+        const px = tracked ? tracked.x : tf.x;
+        const py = tracked ? tracked.y : tf.y;
+        const sc = tracked ? tf.scale * tracked.scale : tf.scale;
+        const bounds = measureClipLocalBounds(ctx, sel, asset, width, height, cache, isMain);
+        const pivPxX = tf.pivotX * (bounds.w * 0.5);
+        const pivPxY = tf.pivotY * (bounds.h * 0.5);
         const cx = width / 2 + px * (width / 2);
         const cy = height / 2 + py * (height / 2);
-        const boxW = Math.max(120, width * 0.28 * sc);
-        const boxH = Math.max(54, height * 0.16 * sc);
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate((sel.transform.rotation * Math.PI) / 180);
-        ctx.strokeStyle = tracked ? '#38bdf8' : '#f59e0b';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
-        ctx.setLineDash([]);
-        ctx.fillStyle = tracked ? '#38bdf8' : '#f59e0b';
-        const corners = [
-          [-boxW / 2, -boxH / 2],
-          [boxW / 2, -boxH / 2],
-          [-boxW / 2, boxH / 2],
-          [boxW / 2, boxH / 2],
-        ];
-        for (const [hx, hy] of corners) {
-          ctx.fillRect(hx - 4, hy - 4, 8, 8);
+
+        if (!isMain) {
+          const boxW = Math.max(88, bounds.w * sc);
+          const boxH = Math.max(42, bounds.h * sc);
+          const scaledPivX = pivPxX * sc * (tf.flipH ? -1 : 1);
+          const scaledPivY = pivPxY * sc * (tf.flipV ? -1 : 1);
+          ctx.save();
+          ctx.translate(cx + pivPxX, cy + pivPxY);
+          ctx.rotate((tf.rotation * Math.PI) / 180);
+          ctx.translate(-scaledPivX, -scaledPivY);
+          ctx.strokeStyle = tracked ? '#38bdf8' : '#f59e0b';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 4]);
+          ctx.strokeRect(-boxW / 2, -boxH / 2, boxW, boxH);
+          ctx.setLineDash([]);
+          ctx.fillStyle = tracked ? '#38bdf8' : '#f59e0b';
+          const corners = [
+            [-boxW / 2, -boxH / 2],
+            [boxW / 2, -boxH / 2],
+            [-boxW / 2, boxH / 2],
+            [boxW / 2, boxH / 2],
+          ];
+          for (const [hx, hy] of corners) {
+            ctx.fillRect(hx - 4, hy - 4, 8, 8);
+          }
+          ctx.restore();
         }
-        ctx.restore();
+
+        // Draw crisp Pivot Anchor Crosshair (always visible on non-main, and on main when offset/keyframed)
+        if (!isMain || hasCustomPivot || hasKeyframes) {
+          const anchorX = cx + pivPxX;
+          const anchorY = cy + pivPxY;
+          ctx.save();
+          // Subtle dashed tether from center to pivot when offset
+          if (hasCustomPivot) {
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 1.25;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(anchorX, anchorY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.fillStyle = 'rgba(11, 13, 17, 0.82)';
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(anchorX, anchorY, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(anchorX - 13, anchorY);
+          ctx.lineTo(anchorX + 13, anchorY);
+          ctx.moveTo(anchorX, anchorY - 13);
+          ctx.lineTo(anchorX, anchorY + 13);
+          ctx.stroke();
+
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(anchorX, anchorY, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       }
     }
   }
+}
+
+const PREVIEW_BASE_CLIP: TimelineClip = {
+  id: '__preview_clip__',
+  trackId: '__preview_track__',
+  assetId: '__preview_scene_a__',
+  kind: 'image',
+  name: 'Preview',
+  startTime: 0,
+  duration: 2,
+  sourceOffset: 0,
+  sourceDuration: 2,
+  speed: 1,
+  volume: 0,
+  fadeIn: 0,
+  fadeOut: 0,
+  muted: true,
+  transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, flipH: false, flipV: false, pivotX: 0, pivotY: 0 },
+  color: { preset: 'none', brightness: 0, contrast: 0, saturation: 0, blur: 0, vignette: 0, hue: 0 },
+  chromaKey: { enabled: false, color: '#00d148', similarity: 35, smoothness: 15 },
+  inAnimation: 'none',
+  outAnimation: 'none',
+  inAnimDuration: 0,
+  outAnimDuration: 0,
+  transitionIn: { type: 'none', duration: 1 },
+};
+
+const PREVIEW_ASSET_A: MediaAsset = {
+  id: '__preview_scene_a__',
+  name: 'Scene A',
+  kind: 'image',
+  url: '',
+  duration: 2,
+};
+
+const PREVIEW_ASSET_B: MediaAsset = {
+  id: '__preview_scene_b__',
+  name: 'Scene B',
+  kind: 'image',
+  url: '',
+  duration: 2,
+};
+
+export function renderEffectPreviewFrame(
+  ctx: CanvasRenderingContext2D,
+  effectType: VideoEffectType,
+  tSec: number,
+  width: number,
+  height: number,
+  cache: MediaElementCache
+): void {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#090b0f';
+  ctx.fillRect(0, 0, width, height);
+
+  const previewClip: TimelineClip = {
+    ...PREVIEW_BASE_CLIP,
+    effects: [
+      {
+        id: 'fx_prev',
+        type: effectType,
+        intensity: 85,
+        speed: 1.25,
+        enabled: true,
+      },
+    ],
+  };
+
+  drawVisualClip(
+    ctx,
+    previewClip,
+    PREVIEW_ASSET_A,
+    tSec,
+    tSec,
+    width,
+    height,
+    cache,
+    true
+  );
+}
+
+export function renderTransitionPreviewFrame(
+  ctx: CanvasRenderingContext2D,
+  transitionType: TransitionType,
+  progress: number,
+  width: number,
+  height: number,
+  cache: MediaElementCache
+): void {
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#090b0f';
+  ctx.fillRect(0, 0, width, height);
+
+  const prevClip: TimelineClip = {
+    ...PREVIEW_BASE_CLIP,
+    id: '__prev_a__',
+    assetId: '__preview_scene_a__',
+  };
+  const nextClip: TimelineClip = {
+    ...PREVIEW_BASE_CLIP,
+    id: '__prev_b__',
+    assetId: '__preview_scene_b__',
+    transitionIn: { type: transitionType, duration: 1 },
+  };
+
+  const p = Math.max(0, Math.min(1, progress));
+  if (transitionType === 'none') {
+    if (p < 0.5) {
+      drawVisualClip(ctx, prevClip, PREVIEW_ASSET_A, 0.5, 0.5, width, height, cache, true);
+    } else {
+      drawVisualClip(ctx, nextClip, PREVIEW_ASSET_B, 0.5, 0.5, width, height, cache, true);
+    }
+    return;
+  }
+
+  renderMainTransition(
+    ctx,
+    prevClip,
+    PREVIEW_ASSET_A,
+    nextClip,
+    PREVIEW_ASSET_B,
+    p,
+    p,
+    p,
+    width,
+    height,
+    cache
+  );
 }

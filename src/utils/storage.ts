@@ -1,4 +1,4 @@
-import { AspectRatio, ExportedVideoRecord, ProjectState } from '../types/studio';
+import { AspectRatio, CustomFontRecord, ExportedVideoRecord, ProjectState } from '../types/studio';
 import {
   createDefaultChromaKey,
   createDefaultColor,
@@ -7,10 +7,11 @@ import {
 } from './defaults';
 
 const DB_NAME = 'nova_studio_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_PROJECTS = 'projects';
 const STORE_BLOBS = 'mediaBlobs';
 const STORE_EXPORTED_VIDEOS = 'exportedVideos';
+const STORE_CUSTOM_FONTS = 'customFonts';
 
 export interface StoredMediaBlob {
   id: string;
@@ -32,6 +33,9 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_EXPORTED_VIDEOS)) {
         db.createObjectStore(STORE_EXPORTED_VIDEOS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_CUSTOM_FONTS)) {
+        db.createObjectStore(STORE_CUSTOM_FONTS, { keyPath: 'id' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -120,6 +124,39 @@ export async function deleteExportedVideoFromDB(id: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_EXPORTED_VIDEOS, 'readwrite');
     tx.objectStore(STORE_EXPORTED_VIDEOS).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function saveCustomFontToDB(font: CustomFontRecord): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOM_FONTS, 'readwrite');
+    tx.objectStore(STORE_CUSTOM_FONTS).put(font);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function listCustomFontsFromDB(): Promise<CustomFontRecord[]> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOM_FONTS, 'readonly');
+    const req = tx.objectStore(STORE_CUSTOM_FONTS).getAll();
+    req.onsuccess = () => {
+      const list = (req.result as CustomFontRecord[]).sort((a, b) => b.createdAt - a.createdAt);
+      resolve(list);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function deleteCustomFontFromDB(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_CUSTOM_FONTS, 'readwrite');
+    tx.objectStore(STORE_CUSTOM_FONTS).delete(id);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

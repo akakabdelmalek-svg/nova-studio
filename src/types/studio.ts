@@ -111,6 +111,8 @@ export interface MediaAsset {
   mimeType?: string;
 }
 
+export type KeyframeEasing = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut';
+
 export interface ClipTransform {
   x: number;
   y: number;
@@ -119,6 +121,31 @@ export interface ClipTransform {
   opacity: number;
   flipH: boolean;
   flipV: boolean;
+  pivotX?: number;
+  pivotY?: number;
+}
+
+export interface TransformKeyframe {
+  id: string;
+  /** Local clip time in seconds (0..clip.duration) */
+  time: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  opacity: number;
+  pivotX: number;
+  pivotY: number;
+  easing: KeyframeEasing;
+}
+
+export interface CustomFontRecord {
+  id: string;
+  family: string;
+  fileName: string;
+  format: string;
+  data: ArrayBuffer;
+  createdAt: number;
 }
 
 export interface ClipColor {
@@ -201,6 +228,7 @@ export interface TimelineClip {
   fadeOut: number;
   muted: boolean;
   transform: ClipTransform;
+  keyframes?: TransformKeyframe[];
   color: ClipColor;
   chromaKey: ChromaKeySettings;
   aiMask?: AIMaskSettings;
